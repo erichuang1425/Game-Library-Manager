@@ -24,6 +24,25 @@ class ThemeSpec:
     focus: QColor
     outline: QColor
     shadow: QColor
+    # Design tokens - spacing (8px grid system)
+    spacing_xs: int = 4
+    spacing_sm: int = 8
+    spacing_md: int = 12
+    spacing_lg: int = 16
+    spacing_xl: int = 24
+    # Design tokens - border radius
+    radius_sm: int = 6
+    radius_md: int = 10
+    radius_lg: int = 14
+    radius_xl: int = 18
+    # Design tokens - animation durations (ms)
+    anim_fast: int = 100
+    anim_normal: int = 180
+    anim_slow: int = 280
+    # Design tokens - elevation/shadow intensity (0-255 alpha)
+    elevation_low: int = 20
+    elevation_mid: int = 40
+    elevation_high: int = 70
 
 
 def _c(r: int, g: int, b: int, a: int = 255) -> QColor:
@@ -164,6 +183,10 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
 
     app.setStyle("Fusion")
 
+    # Use design tokens for consistent styling
+    r_sm, r_md = theme.radius_sm, theme.radius_md
+    sp_sm, sp_md = theme.spacing_sm, theme.spacing_md
+
     css = f"""
     QWidget {{
         color: {theme.text.name()};
@@ -173,21 +196,27 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
         background: {theme.surface_alt.name(QColor.HexArgb)};
         color: {theme.text.name()};
         border: 1px solid {theme.outline.name(QColor.HexArgb)};
+        border-radius: {r_sm}px;
+        padding: {sp_sm - 4}px {sp_sm}px;
     }}
     QLineEdit, QTextEdit, QComboBox, QListWidget, QTableWidget {{
         background: {theme.surface.name(QColor.HexArgb)};
         color: {theme.text.name()};
         border: 1px solid {theme.outline.name(QColor.HexArgb)};
-        border-radius: 6px;
+        border-radius: {r_sm}px;
+        padding: {sp_sm - 2}px;
         selection-background-color: {theme.focus.name(QColor.HexArgb)};
         selection-color: {theme.bg.name(QColor.HexArgb)};
+    }}
+    QLineEdit:focus, QTextEdit:focus, QComboBox:focus {{
+        border-color: {theme.focus.name(QColor.HexArgb)};
     }}
     QPushButton, QToolButton {{
         color: {theme.text.name()};
         background: {theme.surface_alt.name(QColor.HexArgb)};
         border: 1px solid {theme.outline.name(QColor.HexArgb)};
-        border-radius: 8px;
-        padding: 6px 10px;
+        border-radius: {r_md}px;
+        padding: {sp_sm - 2}px {sp_md}px;
     }}
     QPushButton:hover, QToolButton:hover {{
         border-color: {theme.focus.name(QColor.HexArgb)};
@@ -196,15 +225,72 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
     QPushButton:pressed, QToolButton:pressed {{
         background: {theme.surface_alt.darker(108).name(QColor.HexArgb)};
     }}
+    QPushButton:disabled, QToolButton:disabled {{
+        color: {theme.text_muted.name()};
+        background: {theme.surface.name(QColor.HexArgb)};
+        border-color: {theme.outline.darker(110).name(QColor.HexArgb)};
+    }}
+    QListWidget::item {{
+        padding: {sp_sm - 4}px {sp_sm}px;
+        border-radius: {r_sm}px;
+    }}
     QListWidget::item:selected, QTableWidget::item:selected {{
         background: {theme.focus.name(QColor.HexArgb)};
         color: {theme.bg.name(QColor.HexArgb)};
+    }}
+    QListWidget::item:hover {{
+        background: {theme.surface_alt.name(QColor.HexArgb)};
     }}
     QHeaderView::section {{
         background: {theme.surface_alt.name(QColor.HexArgb)};
         color: {theme.text.name()};
         border: 0px;
-        padding: 4px 6px;
+        padding: {sp_sm - 2}px {sp_sm}px;
+        font-weight: 600;
+    }}
+    QScrollBar:vertical {{
+        background: {theme.surface.name(QColor.HexArgb)};
+        width: 10px;
+        border-radius: 5px;
+        margin: 2px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {theme.outline.name(QColor.HexArgb)};
+        border-radius: 4px;
+        min-height: 30px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background: {theme.text_muted.name()};
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        height: 0px;
+    }}
+    QScrollBar:horizontal {{
+        background: {theme.surface.name(QColor.HexArgb)};
+        height: 10px;
+        border-radius: 5px;
+        margin: 2px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: {theme.outline.name(QColor.HexArgb)};
+        border-radius: 4px;
+        min-width: 30px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: {theme.text_muted.name()};
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+        width: 0px;
+    }}
+    QComboBox::drop-down {{
+        border: none;
+        padding-right: {sp_sm}px;
+    }}
+    QComboBox::down-arrow {{
+        image: none;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid {theme.text_muted.name()};
     }}
     """
     app.setStyleSheet(css)
@@ -216,3 +302,68 @@ def current_theme() -> ThemeSpec:
         return THEMES["dark"]
     spec = app.property("theme_spec")
     return spec if isinstance(spec, ThemeSpec) else THEMES["dark"]
+
+
+def shadow_style(theme: ThemeSpec, elevation: str = "mid") -> str:
+    """Generate a box-shadow-like border effect for Qt widgets.
+
+    Qt doesn't support CSS box-shadow, so we simulate depth with borders.
+    For true shadows, use QGraphicsDropShadowEffect on the widget.
+
+    Args:
+        theme: Current theme spec
+        elevation: "low", "mid", or "high"
+
+    Returns:
+        Border style string suggesting depth
+    """
+    alpha = getattr(theme, f"elevation_{elevation}", theme.elevation_mid)
+    shadow_color = QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), alpha)
+    return shadow_color.name(QColor.HexArgb)
+
+
+def card_style(theme: ThemeSpec, hover: bool = False, radius: int | None = None) -> str:
+    """Generate consistent card styling.
+
+    Args:
+        theme: Current theme spec
+        hover: Whether this is for hover state
+        radius: Override border radius (uses theme.radius_lg by default)
+
+    Returns:
+        Complete stylesheet for a card QFrame
+    """
+    r = radius if radius is not None else theme.radius_lg
+    border_color = theme.card_hover if hover else theme.card_border
+    bg = theme.card
+
+    return (
+        f"border: 1px solid {border_color.name(QColor.HexArgb)}; "
+        f"border-radius: {r}px; "
+        f"background: {bg.name(QColor.HexArgb)};"
+    )
+
+
+def chip_style(theme: ThemeSpec, bg_color: QColor | None = None, active: bool = False) -> str:
+    """Generate consistent chip/pill button styling.
+
+    Args:
+        theme: Current theme spec
+        bg_color: Override background color (uses theme.chip_bg by default)
+        active: Whether this chip is in active/selected state
+
+    Returns:
+        Complete stylesheet for a chip QPushButton
+    """
+    bg = bg_color or theme.chip_bg
+    border = theme.focus if active else theme.chip_border
+    text = theme.bg if active else theme.text
+
+    return (
+        f"background: {bg.name(QColor.HexArgb)}; "
+        f"color: {text.name()}; "
+        f"padding: 2px 8px; "
+        f"border-radius: {theme.radius_sm + 1}px; "
+        f"font-size: 11px; "
+        f"border: 1px solid {border.name(QColor.HexArgb)};"
+    )

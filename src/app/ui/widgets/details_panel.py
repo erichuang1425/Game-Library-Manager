@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from app.models import Game
 from app.ui.theme import current_theme
+from app.ui.typography import get_scale, title_style, caption_style, label_style
 
 def _fmt_dt(dt: Optional[datetime]) -> str:
     if dt is None:
@@ -25,18 +26,19 @@ class DetailsPanel(QWidget):
         self._game: Optional[Game] = None
         self._loading = False
         theme = current_theme()
+        scale = get_scale()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(theme.spacing_md)
 
         self.title = QLabel("Select a game")
-        self.title.setStyleSheet(f"font-size: 16px; font-weight: 700; color:{theme.text.name()};")
+        self.title.setStyleSheet(title_style(theme, scale))
         self.title.setWordWrap(True)
         layout.addWidget(self.title)
 
         self.hint = QLabel("")
-        self.hint.setStyleSheet(f"color:{theme.accent.name()}; font-size:11px;")
+        self.hint.setStyleSheet(f"color:{theme.accent.name()}; {caption_style(theme, scale).replace(f'color: {theme.text_muted.name()};', '')}")
         self.hint.setWordWrap(True)
         self.hint.hide()
         layout.addWidget(self.hint)
@@ -106,7 +108,7 @@ class DetailsPanel(QWidget):
         self.installed_ver.textChanged.connect(self._on_changed)
 
         self.source_ver = QLabel("Source: —")
-        self.source_ver.setStyleSheet(f"color: {theme.text_muted.name()};")
+        self.source_ver.setStyleSheet(caption_style(theme, scale))
 
         ver_row.addWidget(QLabel("Installed:"))
         ver_row.addWidget(self.installed_ver, 1)
@@ -150,13 +152,13 @@ class DetailsPanel(QWidget):
 
         # Shortcut info
         self.launcher_info = QLabel("")
-        self.launcher_info.setStyleSheet(f"color: {theme.text_muted.name()};")
+        self.launcher_info.setStyleSheet(caption_style(theme, scale))
         self.launcher_info.setWordWrap(True)
         layout.addWidget(self.launcher_info)
 
         # Last played
         self.last_played = QLabel("")
-        self.last_played.setStyleSheet(f"color: {theme.text_muted.name()};")
+        self.last_played.setStyleSheet(caption_style(theme, scale))
         layout.addWidget(self.last_played)
 
         layout.addStretch(1)
