@@ -367,3 +367,47 @@ def chip_style(theme: ThemeSpec, bg_color: QColor | None = None, active: bool = 
         f"font-size: 11px; "
         f"border: 1px solid {border.name(QColor.HexArgb)};"
     )
+
+
+def focus_ring_style(theme: ThemeSpec, width: int = 2) -> str:
+    """Generate focus ring styling for keyboard navigation.
+
+    Args:
+        theme: Current theme spec
+        width: Border width for focus ring
+
+    Returns:
+        CSS border style for focus state
+    """
+    return f"border: {width}px solid {theme.focus.name(QColor.HexArgb)}; outline: none;"
+
+
+def filter_chip_style(theme: ThemeSpec, active: bool = False, removable: bool = False) -> str:
+    """Generate styling for active filter chips.
+
+    Args:
+        theme: Current theme spec
+        active: Whether the filter is active
+        removable: Whether to show remove indicator
+
+    Returns:
+        Complete stylesheet for a filter chip
+    """
+    if active:
+        bg = theme.accent
+        text = theme.bg
+        border = theme.accent.darker(110)
+    else:
+        bg = theme.chip_bg
+        text = theme.text
+        border = theme.chip_border
+
+    return (
+        f"background: {bg.name(QColor.HexArgb)}; "
+        f"color: {text.name()}; "
+        f"padding: 4px 12px; "
+        f"border-radius: {theme.radius_md}px; "
+        f"font-size: 12px; "
+        f"font-weight: 500; "
+        f"border: 1px solid {border.name(QColor.HexArgb)};"
+    )

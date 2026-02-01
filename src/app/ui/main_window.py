@@ -18,7 +18,7 @@ from app.storage import (
     load_library_bundle, save_library_bundle
 )
 from app.logging_utils import connect_safe
-from app.ui.widgets import GameGrid, DetailsPanel
+from app.ui.widgets import GameGrid, DetailsPanel, FilterChipsBar, build_filter_chips, show_success, show_error
 from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.dialogs import ScanWorker, UpdateWorker
 from app.ui.dialogs import PreferencesDialog
@@ -311,6 +311,12 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.details_toggle)
         controls.addStretch(1)
 
+        # Filter chips bar (shows active filters)
+        self.filter_chips = FilterChipsBar()
+        self.filter_chips.filter_removed.connect(self._on_filter_chip_removed)
+        self.filter_chips.clear_all_clicked.connect(self._clear_all_filters)
+        content_layout.addWidget(self.filter_chips)
+
         self.grid = GameGrid()
         self.grid.context_action.connect(self._on_grid_context_action)
         self.grid.game_selected.connect(self._on_game_selected)
@@ -319,6 +325,7 @@ class MainWindow(QMainWindow):
         self.grid.updates_requested.connect(self._jump_to_updates)
         self.grid.rating_changed.connect(self._on_rating_changed)
         self.grid.tag_filter_requested.connect(self._on_tag_filter_requested)
+        self.grid.scan_requested.connect(self._on_scan_clicked)
         self.health = HealthChecksWidget()
         self.health.open_folder_requested.connect(self._open_shortcut_folder)
         self.health.remove_game_requested.connect(self._remove_game)
@@ -678,6 +685,7 @@ class MainWindow(QMainWindow):
             )
 
         self._render()
+        self._update_filter_chips()
         if self._tag_filter:
             from app.ui.theme import current_theme
             theme = current_theme()
@@ -873,6 +881,11 @@ class MainWindow(QMainWindow):
         ]
         msg = "Scan finished: no shortcut files found." if len(games) == 0 else "\n".join(msg_lines)
         self.statusBar().showMessage(msg, 8000)
+        # Show toast for quick feedback
+        if len(games) == 0:
+            show_error("No shortcuts found in the selected folder.")
+        else:
+            show_success(f"Scan complete: {new_count} new, {updated_count} updated games.")
         QMessageBox.information(self, "Scan summary", msg)
         self._log.info(
             "scan_done %s",
@@ -1034,9 +1047,13 @@ class MainWindow(QMainWindow):
         errs = [r for r in results if r.get("status") == "error"]
         self.statusBar().showMessage(f"Updates checked: {ok} ok, {len(errs)} errors", 8000)
         self._pulse_widget(self.check_updates_btn)
+        # Toast notification
         if errs:
+            show_error(f"Update check: {ok} ok, {len(errs)} failed")
             lines = "\n".join(f"- {r.get('error')}" for r in errs[:10])
             QMessageBox.warning(self, "Some checks failed", lines)
+        else:
+            show_success(f"Update check complete: {ok} sources checked")
         self._log.info("updates_done %s", kv(ok=ok, errors=len(errs), total=len(results)))
 
     def _apply_settings_values(self, vals: dict) -> None:
@@ -1188,6 +1205,60 @@ class MainWindow(QMainWindow):
         self._settings.pop("tag_filter", None)
         self._persist_settings()
         self._apply_search()
+
+    def _on_filter_chip_removed(self, key: str) -> None:
+        """Handle removal of a filter chip."""
+        if key == "status":
+            self._status_filter = "all"
+            self.status_filter.setCurrentText("All")
+        elif key == "confidence":
+            self._confidence_filter = "all"
+            self.conf_filter.setCurrentText("All")
+        elif key == "type":
+            self._type_filter = "all"
+            self.type_filter.setCurrentText("All")
+        elif key == "tag":
+            self._tag_filter = None
+            self.tag_filter_label.hide()
+            self.clear_tag_btn.setVisible(False)
+        elif key == "quick":
+            self._quick_filter = "all"
+        elif key == "search":
+            self.search.clear()
+
+        self._persist_settings()
+        self._apply_search()
+
+    def _clear_all_filters(self) -> None:
+        """Clear all active filters."""
+        self._status_filter = "all"
+        self._confidence_filter = "all"
+        self._type_filter = "all"
+        self._tag_filter = None
+        self._quick_filter = "all"
+
+        # Update UI
+        self.status_filter.setCurrentText("All")
+        self.conf_filter.setCurrentText("All")
+        self.type_filter.setCurrentText("All")
+        self.search.clear()
+        self.tag_filter_label.hide()
+        self.clear_tag_btn.setVisible(False)
+
+        self._persist_settings()
+        self._apply_search()
+
+    def _update_filter_chips(self) -> None:
+        """Update the filter chips bar based on current filter state."""
+        chips = build_filter_chips(
+            status=self._status_filter,
+            confidence=self._confidence_filter,
+            type_filter=self._type_filter,
+            tag=self._tag_filter,
+            quick_filter=self._quick_filter,
+            search_query=self.search.text().strip(),
+        )
+        self.filter_chips.set_filters(chips)
 
     def _jump_to_updates(self, game_id: str) -> None:
         # switch nav to Updates and highlight
