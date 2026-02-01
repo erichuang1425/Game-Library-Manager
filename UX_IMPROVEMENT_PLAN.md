@@ -284,12 +284,12 @@ This plan outlines strategic UX improvements for the Game Library Manager applic
 - [x] Recent searches
 - [ ] Card layout variants (deferred to Phase 3)
 
-### Phase 3: Polish (Weeks 5-6)
-- [ ] Onboarding wizard
-- [ ] Interactive tooltips
-- [ ] Skeleton loading states
-- [ ] Micro-interaction refinements
-- [ ] Progress indicators on cards
+### Phase 3: Polish (Weeks 5-6) - COMPLETED
+- [ ] Onboarding wizard (deferred to future)
+- [x] Interactive tooltips
+- [x] Skeleton loading states
+- [x] Micro-interaction refinements (relative time display)
+- [x] Progress indicators on cards (last played badge)
 
 ### Phase 4: Accessibility (Week 7)
 - [ ] Screen reader labels
