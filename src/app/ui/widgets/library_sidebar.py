@@ -3,9 +3,12 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
+from PySide6.QtGui import QColor
 
 from app.models import Collection
 from app.services.collection_engine import apply_collection
+from app.ui.theme import current_theme
+from app.ui.typography import get_scale, heading_style
 
 
 def _collection_key(collection_id: str) -> str:
@@ -22,17 +25,40 @@ class LibrarySidebar(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._theme = current_theme()
+        theme = self._theme
+        scale = get_scale()
+
         self.setMinimumWidth(200)
         self.setMaximumWidth(320)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(theme.spacing_sm, theme.spacing_sm, theme.spacing_sm, 0)
+        layout.setSpacing(theme.spacing_sm)
 
         title = QLabel("Library")
-        title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        title.setStyleSheet(heading_style(theme, scale))
 
         self.list = QListWidget()
+        self.list.setStyleSheet(f"""
+            QListWidget {{
+                background: transparent;
+                border: none;
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: {theme.spacing_sm - 2}px {theme.spacing_sm}px;
+                border-radius: {theme.radius_sm}px;
+                margin: 1px 0;
+            }}
+            QListWidget::item:selected {{
+                background: {theme.focus.name(QColor.HexArgb)};
+                color: {theme.bg.name()};
+            }}
+            QListWidget::item:hover:!selected {{
+                background: {theme.surface_alt.name(QColor.HexArgb)};
+            }}
+        """)
         self.list.currentRowChanged.connect(self._on_row_changed)
 
         layout.addWidget(title)
@@ -62,11 +88,15 @@ class LibrarySidebar(QWidget):
         fm = self.list.fontMetrics()
         max_w = max(140, self.list.viewport().width() - 12)
 
-        def _item(text: str, key: str | None) -> QListWidgetItem:
-            it = QListWidgetItem(fm.elidedText(text, Qt.ElideRight, max_w))
-            it.setToolTip(text)
+        theme = self._theme
+
+        def _item(text: str, key: str | None, is_header: bool = False) -> QListWidgetItem:
+            display = text.replace("-- ", "").replace(" --", "") if is_header else text
+            it = QListWidgetItem(fm.elidedText(display, Qt.ElideRight, max_w))
+            it.setToolTip(text if not is_header else "")
             if key is None:
                 it.setFlags(Qt.NoItemFlags)
+                it.setForeground(theme.text_muted)
             else:
                 it.setData(Qt.UserRole, key)
             return it
@@ -75,21 +105,21 @@ class LibrarySidebar(QWidget):
         self.list.addItem(_item(f"All Games ({all_count})", "all"))
 
         # Manual collections
-        self.list.addItem(_item("-- Collections --", None))
+        self.list.addItem(_item("-- Collections --", None, is_header=True))
         manual = sorted([c for c in self._collections if c.type == "manual"], key=lambda x: x.name.lower())
         for c in manual:
             cnt = self._collection_count(c)
-            self.list.addItem(_item(f"* {c.name} ({cnt})", _collection_key(c.collection_id)))
+            self.list.addItem(_item(f"{c.name} ({cnt})", _collection_key(c.collection_id)))
 
         # Smart collections
-        self.list.addItem(_item("-- Smart Collections --", None))
+        self.list.addItem(_item("-- Smart Collections --", None, is_header=True))
         smart = sorted([c for c in self._collections if c.type == "smart"], key=lambda x: x.name.lower())
         for c in smart:
             cnt = self._collection_count(c)
-            self.list.addItem(_item(f"> {c.name} ({cnt})", _collection_key(c.collection_id)))
+            self.list.addItem(_item(f"{c.name} ({cnt})", _collection_key(c.collection_id)))
 
         # Tools
-        self.list.addItem(_item("-- Tools --", None))
+        self.list.addItem(_item("-- Tools --", None, is_header=True))
         self.list.addItem(_item("Updates", "updates"))
         self.list.addItem(_item("Health Checks", "health"))
 

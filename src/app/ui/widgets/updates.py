@@ -2,6 +2,7 @@
 from typing import List
 
 from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
     QPushButton, QHBoxLayout, QAbstractItemView, QLineEdit, QFrame
@@ -11,6 +12,8 @@ from app.models import Game
 from app.services import compare_versions, parse_version
 from app.services.version_parser import CompareResult
 from app.logging_utils import get_logger, kv, connect_safe, RateLimiter
+from app.ui.theme import current_theme, chip_style
+from app.ui.typography import get_scale, heading_style
 
 _log = get_logger("ui.updates")
 _rate = RateLimiter()
@@ -23,28 +26,43 @@ class UpdatesWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self._theme = current_theme()
+        theme = self._theme
+        scale = get_scale()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(theme.spacing_sm)
 
         title = QLabel("Updates")
-        title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        title.setStyleSheet(heading_style(theme, scale))
         layout.addWidget(title)
 
         # Filters
         pill_row = QHBoxLayout()
-        self.filter_all = QPushButton("All")
-        self.filter_updates = QPushButton("Updates")
-        self.filter_unknown = QPushButton("Unknown")
-        for btn in (self.filter_all, self.filter_updates, self.filter_unknown):
+        pill_row.setSpacing(theme.spacing_xs)
+
+        def make_filter_btn(text: str) -> QPushButton:
+            btn = QPushButton(text)
             btn.setCheckable(True)
+            btn.setStyleSheet(f"""
+                QPushButton {{ {chip_style(theme)} }}
+                QPushButton:checked {{ {chip_style(theme, active=True)} }}
+                QPushButton:hover {{ border-color: {theme.focus.name(QColor.HexArgb)}; }}
+            """)
             connect_safe(btn.clicked, self._on_filter_clicked, _log, "updates_filter_click")
+            return btn
+
+        self.filter_all = make_filter_btn("All")
+        self.filter_updates = make_filter_btn("Updates")
+        self.filter_unknown = make_filter_btn("Unknown")
+        for btn in (self.filter_all, self.filter_updates, self.filter_unknown):
             pill_row.addWidget(btn)
         pill_row.addStretch(1)
-        self.density_comfort = QPushButton("Comfort")
-        self.density_compact = QPushButton("Compact")
+        self.density_comfort = make_filter_btn("Comfort")
+        self.density_compact = make_filter_btn("Compact")
         for btn in (self.density_comfort, self.density_compact):
-            btn.setCheckable(True)
+            btn.clicked.disconnect()
             connect_safe(btn.clicked, self._on_density_clicked, _log, "updates_density_click")
             pill_row.addWidget(btn)
         layout.addLayout(pill_row)
