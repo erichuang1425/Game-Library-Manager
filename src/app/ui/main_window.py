@@ -18,7 +18,7 @@ from app.storage import (
     load_library_bundle, save_library_bundle
 )
 from app.logging_utils import connect_safe
-from app.ui.widgets import GameGrid, DetailsPanel, FilterChipsBar, build_filter_chips, show_success, show_error
+from app.ui.widgets import GameGrid, DetailsPanel, FilterChipsBar, build_filter_chips, show_success, show_error, BatchToolbar
 from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.dialogs import ScanWorker, UpdateWorker
 from app.ui.dialogs import PreferencesDialog
@@ -309,6 +309,13 @@ class MainWindow(QMainWindow):
         self.details_toggle.setChecked(self._details_visible)
         self.details_toggle.clicked.connect(self._toggle_details_panel)
         controls.addWidget(self.details_toggle)
+
+        # Multi-select mode button
+        self.select_btn = QPushButton("Select")
+        self.select_btn.setCheckable(True)
+        self.select_btn.clicked.connect(self._toggle_multi_select_mode)
+        controls.addWidget(self.select_btn)
+
         controls.addStretch(1)
 
         # Filter chips bar (shows active filters)
@@ -316,6 +323,16 @@ class MainWindow(QMainWindow):
         self.filter_chips.filter_removed.connect(self._on_filter_chip_removed)
         self.filter_chips.clear_all_clicked.connect(self._clear_all_filters)
         content_layout.addWidget(self.filter_chips)
+
+        # Batch toolbar (shown in multi-select mode)
+        self.batch_toolbar = BatchToolbar()
+        self.batch_toolbar.set_status_requested.connect(self._on_batch_set_status)
+        self.batch_toolbar.add_tag_requested.connect(self._on_batch_add_tag)
+        self.batch_toolbar.add_to_collection_requested.connect(self._on_batch_add_to_collection)
+        self.batch_toolbar.select_all_clicked.connect(lambda: self.grid.select_all())
+        self.batch_toolbar.clear_selection_clicked.connect(lambda: self.grid.clear_selection())
+        self.batch_toolbar.exit_mode_clicked.connect(self._exit_multi_select_mode)
+        content_layout.addWidget(self.batch_toolbar)
 
         self.grid = GameGrid()
         self.grid.context_action.connect(self._on_grid_context_action)
@@ -326,6 +343,7 @@ class MainWindow(QMainWindow):
         self.grid.rating_changed.connect(self._on_rating_changed)
         self.grid.tag_filter_requested.connect(self._on_tag_filter_requested)
         self.grid.scan_requested.connect(self._on_scan_clicked)
+        self.grid.selection_changed.connect(self._on_selection_changed)
         self.health = HealthChecksWidget()
         self.health.open_folder_requested.connect(self._open_shortcut_folder)
         self.health.remove_game_requested.connect(self._remove_game)
@@ -1259,6 +1277,83 @@ class MainWindow(QMainWindow):
             search_query=self.search.text().strip(),
         )
         self.filter_chips.set_filters(chips)
+
+    # ---- Multi-Select Mode ----
+    def _toggle_multi_select_mode(self) -> None:
+        """Toggle multi-select mode on/off."""
+        enabled = self.select_btn.isChecked()
+        self.grid.set_multi_select_mode(enabled)
+        if enabled:
+            self.batch_toolbar.show_toolbar()
+        else:
+            self.batch_toolbar.hide_toolbar()
+            self.grid.clear_selection()
+
+    def _exit_multi_select_mode(self) -> None:
+        """Exit multi-select mode."""
+        self.select_btn.setChecked(False)
+        self._toggle_multi_select_mode()
+
+    def _on_selection_changed(self, game_ids: list) -> None:
+        """Handle selection changes in the grid."""
+        self.batch_toolbar.update_selection(game_ids)
+
+    def _on_batch_set_status(self, status: str, game_ids: list) -> None:
+        """Set status for multiple games."""
+        changed = 0
+        for game_id in game_ids:
+            g = self._get_game(game_id)
+            if g and g.status != status:
+                g.status = status
+                changed += 1
+        if changed:
+            self._save_bundle()
+            self._apply_search()
+            show_success(f"Updated status to '{status}' for {changed} games")
+
+    def _on_batch_add_tag(self, tag: str, game_ids: list) -> None:
+        """Add a tag to multiple games."""
+        changed = 0
+        for game_id in game_ids:
+            g = self._get_game(game_id)
+            if g:
+                existing = [t.strip() for t in (g.tags or "").split(",") if t.strip()]
+                if tag not in existing:
+                    existing.append(tag)
+                    g.tags = ", ".join(existing)
+                    changed += 1
+        if changed:
+            self._save_bundle()
+            self._apply_search()
+            show_success(f"Added tag '{tag}' to {changed} games")
+
+    def _on_batch_add_to_collection(self, game_ids: list) -> None:
+        """Add multiple games to a collection."""
+        manual = [c for c in self._collections if c.type == "manual"]
+        if not manual:
+            QMessageBox.information(self, "No Collections", "Create a collection first.")
+            return
+
+        from PySide6.QtWidgets import QInputDialog
+        names = [c.name for c in manual]
+        chosen, ok = QInputDialog.getItem(self, "Add to Collection", "Choose collection:", names, 0, False)
+        if not ok:
+            return
+
+        target = next((c for c in manual if c.name == chosen), None)
+        if not target:
+            return
+
+        added = 0
+        for game_id in game_ids:
+            if game_id not in target.game_ids:
+                target.game_ids.append(game_id)
+                added += 1
+
+        if added:
+            self._save_bundle()
+            self.sidebar.set_collections(self._collections, self._all_games)
+            show_success(f"Added {added} games to '{chosen}'")
 
     def _jump_to_updates(self, game_id: str) -> None:
         # switch nav to Updates and highlight
