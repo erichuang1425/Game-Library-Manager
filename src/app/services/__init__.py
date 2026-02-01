@@ -7,3 +7,4 @@ from .library_merge import merge_scanned_into_library
 from .collection_engine import apply_collection
 from .version_parser import parse_version, compare_versions
 from .update_checker import fetch_source_version, check_updates_background
+from .color_extractor import extract_dominant_color, extract_palette, color_for_overlay
