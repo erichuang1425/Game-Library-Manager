@@ -51,15 +51,18 @@ class GameCard(QFrame):
     updates_clicked = Signal(str)      # game_id
     rating_changed = Signal(str, object)  # game_id, rating or None
     tag_clicked = Signal(str)          # tag text
+    selection_toggled = Signal(str, bool)  # game_id, is_selected
 
 
-    def __init__(self, game: Game, view_mode: str = "comfortable", parent: Optional[QWidget] = None, type_scale: str = "normal", chip_level: str = "medium") -> None:
+    def __init__(self, game: Game, view_mode: str = "comfortable", parent: Optional[QWidget] = None, type_scale: str = "normal", chip_level: str = "medium", multi_select_mode: bool = False) -> None:
         super().__init__(parent)
         self.game = game
         self.type_scale = type_scale
         self.chip_level = chip_level
         self._icon_update_scheduled = False
         self._last_icon_size = QSize()
+        self._selected = False
+        self._multi_select_mode = multi_select_mode
         self.setFrameShape(QFrame.StyledPanel)
         self.view_mode = view_mode
         self._theme = current_theme()
@@ -118,7 +121,22 @@ class GameCard(QFrame):
         status_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
         sw = QHBoxLayout(status_overlay)
         sw.setContentsMargins(6, 6, 6, 6)
-        sw.setSpacing(0)
+        sw.setSpacing(4)
+
+        # Selection checkbox (visible in multi-select mode)
+        self._select_checkbox = QLabel("☐")
+        self._select_checkbox.setFixedSize(22, 22)
+        self._select_checkbox.setAlignment(Qt.AlignCenter)
+        self._select_checkbox.setStyleSheet(
+            f"background: rgba(0,0,0,0.5); "
+            f"color: white; "
+            f"border-radius: 4px; "
+            f"font-size: 14px; "
+            f"font-weight: bold;"
+        )
+        self._select_checkbox.setToolTip("Click to select")
+        self._select_checkbox.hide()  # Hidden by default, shown in multi-select mode
+        sw.addWidget(self._select_checkbox, 0, Qt.AlignLeft | Qt.AlignTop)
 
         # Enhanced status badge with icon and subtle styling
         status_colors = {
@@ -265,8 +283,77 @@ class GameCard(QFrame):
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
-            self.clicked.emit(self.game.game_id)
+            # In multi-select mode or with Ctrl held, toggle selection
+            if self._multi_select_mode or event.modifiers() & Qt.ControlModifier:
+                self.toggle_selection()
+            else:
+                self.clicked.emit(self.game.game_id)
         super().mousePressEvent(event)
+
+    def set_multi_select_mode(self, enabled: bool) -> None:
+        """Enable or disable multi-select mode."""
+        self._multi_select_mode = enabled
+        if enabled:
+            self._select_checkbox.show()
+            self._update_checkbox_visual()
+        else:
+            self._select_checkbox.hide()
+            if self._selected:
+                self.set_selected(False)
+
+    def set_selected(self, selected: bool) -> None:
+        """Set the selection state of this card."""
+        if self._selected != selected:
+            self._selected = selected
+            self._update_selection_visual()
+            self._update_checkbox_visual()
+
+    def toggle_selection(self) -> None:
+        """Toggle the selection state."""
+        self._selected = not self._selected
+        self._update_selection_visual()
+        self._update_checkbox_visual()
+        self.selection_toggled.emit(self.game.game_id, self._selected)
+
+    def is_selected(self) -> bool:
+        """Return current selection state."""
+        return self._selected
+
+    def _update_checkbox_visual(self) -> None:
+        """Update the checkbox appearance based on selection state."""
+        theme = self._theme
+        if self._selected:
+            self._select_checkbox.setText("☑")
+            self._select_checkbox.setStyleSheet(
+                f"background: {theme.accent.name()}; "
+                f"color: white; "
+                f"border-radius: 4px; "
+                f"font-size: 14px; "
+                f"font-weight: bold;"
+            )
+        else:
+            self._select_checkbox.setText("☐")
+            self._select_checkbox.setStyleSheet(
+                f"background: rgba(0,0,0,0.5); "
+                f"color: white; "
+                f"border-radius: 4px; "
+                f"font-size: 14px; "
+                f"font-weight: bold;"
+            )
+
+    def _update_selection_visual(self) -> None:
+        """Update card border to show selection state."""
+        theme = self._theme
+        if self._selected:
+            self.setStyleSheet(
+                f"QFrame {{ {card_style(theme)} border: 2px solid {theme.accent.name()}; }}"
+                f"QFrame:hover {{ {card_style(theme, hover=True)} border: 2px solid {theme.accent.name()}; }}"
+            )
+        else:
+            self.setStyleSheet(
+                f"QFrame {{ {card_style(theme)} }}"
+                f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
+            )
     
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
@@ -451,10 +538,13 @@ class GameGrid(QWidget):
     rating_changed = Signal(str, object)
     tag_filter_requested = Signal(str)
     scan_requested = Signal()  # emitted when user clicks scan from empty state
+    selection_changed = Signal(list)  # emits list of selected game_ids
 
     def __init__(self) -> None:
         super().__init__()
         self._focused_index: int = -1  # keyboard navigation index
+        self._multi_select_mode: bool = False
+        self._selected_game_ids: set[str] = set()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -622,7 +712,7 @@ class GameGrid(QWidget):
 
         for idx, g in enumerate(self._games):
             try:
-                card = GameCard(g, view_mode=self._view_mode, parent=self.container, type_scale=self._type_scale, chip_level=chip_level)
+                card = GameCard(g, view_mode=self._view_mode, parent=self.container, type_scale=self._type_scale, chip_level=chip_level, multi_select_mode=self._multi_select_mode)
             except Exception:
                 _log.exception("card_build_failed %s", kv(game_id=getattr(g, "game_id", "unknown"), title=getattr(g, "title", "unknown")))
                 continue
@@ -633,6 +723,12 @@ class GameGrid(QWidget):
             card.updates_clicked.connect(self.updates_requested.emit)
             card.rating_changed.connect(self.rating_changed.emit)
             card.tag_clicked.connect(self.tag_filter_requested.emit)
+            card.selection_toggled.connect(self._on_card_selection_toggled)
+
+            # Restore selection state if card was previously selected
+            if g.game_id in self._selected_game_ids:
+                card.set_selected(True)
+
             row = idx // cols
             col = idx % cols
             try:
@@ -890,3 +986,52 @@ class GameGrid(QWidget):
             if item and item.widget():
                 self._apply_focus_style(item.widget(), False)
         self._focused_index = -1
+
+    # ---- Multi-Select Mode ----
+    def set_multi_select_mode(self, enabled: bool) -> None:
+        """Enable or disable multi-select mode for the grid."""
+        if self._multi_select_mode == enabled:
+            return
+        self._multi_select_mode = enabled
+        if not enabled:
+            self._selected_game_ids.clear()
+        # Update all existing cards
+        for idx in range(self.grid.count()):
+            item = self.grid.itemAt(idx)
+            if item and item.widget() and isinstance(item.widget(), GameCard):
+                item.widget().set_multi_select_mode(enabled)
+        self.selection_changed.emit(list(self._selected_game_ids))
+
+    def is_multi_select_mode(self) -> bool:
+        """Check if multi-select mode is enabled."""
+        return self._multi_select_mode
+
+    def get_selected_game_ids(self) -> List[str]:
+        """Get list of selected game IDs."""
+        return list(self._selected_game_ids)
+
+    def select_all(self) -> None:
+        """Select all games in the current view."""
+        self._selected_game_ids = {g.game_id for g in self._games}
+        for idx in range(self.grid.count()):
+            item = self.grid.itemAt(idx)
+            if item and item.widget() and isinstance(item.widget(), GameCard):
+                item.widget().set_selected(True)
+        self.selection_changed.emit(list(self._selected_game_ids))
+
+    def clear_selection(self) -> None:
+        """Clear all selections."""
+        self._selected_game_ids.clear()
+        for idx in range(self.grid.count()):
+            item = self.grid.itemAt(idx)
+            if item and item.widget() and isinstance(item.widget(), GameCard):
+                item.widget().set_selected(False)
+        self.selection_changed.emit([])
+
+    def _on_card_selection_toggled(self, game_id: str, is_selected: bool) -> None:
+        """Handle selection toggle from a card."""
+        if is_selected:
+            self._selected_game_ids.add(game_id)
+        else:
+            self._selected_game_ids.discard(game_id)
+        self.selection_changed.emit(list(self._selected_game_ids))

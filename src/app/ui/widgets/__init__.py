@@ -9,3 +9,7 @@ from .toast import (
 from .filter_chips import (
     FilterChip, FilterChipWidget, FilterChipsBar, build_filter_chips
 )
+from .batch_toolbar import BatchToolbar
+from .search_bar import (
+    EnhancedSearchBar, SearchParser, ParsedSearch, RecentSearches
+)

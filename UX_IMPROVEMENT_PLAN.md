@@ -277,12 +277,12 @@ This plan outlines strategic UX improvements for the Game Library Manager applic
 - [x] Success toast notifications
 - [x] Filter chips for active filters
 
-### Phase 2: Core Features (Weeks 3-4)
-- [ ] Multi-select mode
-- [ ] Batch operations toolbar
-- [ ] Search syntax parser
-- [ ] Recent searches
-- [ ] Card layout variants
+### Phase 2: Core Features (Weeks 3-4) - COMPLETED
+- [x] Multi-select mode
+- [x] Batch operations toolbar
+- [x] Search syntax parser
+- [x] Recent searches
+- [ ] Card layout variants (deferred to Phase 3)
 
 ### Phase 3: Polish (Weeks 5-6)
 - [ ] Onboarding wizard
