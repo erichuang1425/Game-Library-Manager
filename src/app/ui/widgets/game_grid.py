@@ -4,7 +4,8 @@ from typing import List, Optional
 from PySide6.QtCore import Qt, Signal, QTimer, QEasingCurve, QPropertyAnimation, QSize
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QScrollArea,
-    QFrame, QPushButton, QSizePolicy, QGridLayout, QMenu, QGraphicsOpacityEffect, QStackedLayout
+    QFrame, QPushButton, QSizePolicy, QGridLayout, QMenu, QGraphicsOpacityEffect, QStackedLayout,
+    QGraphicsDropShadowEffect
 )
 from PySide6.QtGui import QAction, QCursor, QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -14,7 +15,7 @@ from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, icon_for_path, best_icon_path
 from app.services.version_parser import CompareResult
 from app.models import game
-from app.ui.theme import current_theme
+from app.ui.theme import current_theme, card_style, chip_style
 from app.logging_utils import get_logger, kv, RateLimiter, wrap_slot
 import time
 
@@ -61,14 +62,24 @@ class GameCard(QFrame):
         self._last_icon_size = QSize()
         self.setFrameShape(QFrame.StyledPanel)
         self.view_mode = view_mode
-        pad = 12 if view_mode == "comfortable" else 8
         self._theme = current_theme()
         theme = self._theme
+        pad = theme.spacing_md if view_mode == "comfortable" else theme.spacing_sm
+
+        # Use design token-based card styling
         self.setStyleSheet(
-            f"QFrame {{ border: 1px solid {theme.card_border.name(QColor.HexArgb)}; "
-            f"border-radius: 14px; background: {theme.card.name(QColor.HexArgb)}; }}"
-            f"QFrame:hover {{ border: 1px solid {theme.card_hover.name(QColor.HexArgb)}; }}"
+            f"QFrame {{ {card_style(theme)} }}"
+            f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
         )
+
+        # Add subtle drop shadow for depth
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(12)
+        shadow.setOffset(0, 2)
+        shadow.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_low))
+        self.setGraphicsEffect(shadow)
+        self._shadow_effect = shadow
+
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         # defensive: cards must never become top-level windows
@@ -169,8 +180,7 @@ class GameCard(QFrame):
             btn.setFlat(True)
             btn.setFocusPolicy(Qt.NoFocus)
             btn.setStyleSheet(
-                f"QPushButton {{ background:{color.name(QColor.HexArgb)}; color:{theme.text.name()}; "
-                f"padding:2px 8px; border-radius:7px; font-size:11px; border:1px solid {theme.chip_border.name(QColor.HexArgb)}; }}"
+                f"QPushButton {{ {chip_style(theme, color)} }}"
                 f"QPushButton:hover {{ border-color:{theme.focus.name(QColor.HexArgb)}; }}"
                 f"QPushButton:pressed {{ background-color: {theme.focus.name(QColor.HexArgb)}; color:{theme.bg.name(QColor.HexArgb)}; }}"
             )
@@ -276,12 +286,24 @@ class GameCard(QFrame):
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
         self.overlay_anim.start()
+        # Elevate shadow on hover for "lift" effect
+        if hasattr(self, '_shadow_effect') and self._shadow_effect:
+            theme = self._theme
+            self._shadow_effect.setBlurRadius(20)
+            self._shadow_effect.setOffset(0, 4)
+            self._shadow_effect.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_mid))
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Backward)
         self.overlay_anim.start()
+        # Reset shadow to normal state
+        if hasattr(self, '_shadow_effect') and self._shadow_effect:
+            theme = self._theme
+            self._shadow_effect.setBlurRadius(12)
+            self._shadow_effect.setOffset(0, 2)
+            self._shadow_effect.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_low))
         super().leaveEvent(event)
 
     def resizeEvent(self, event) -> None:
