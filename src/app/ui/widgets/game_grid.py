@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 from typing import List, Optional
+from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal, QTimer, QEasingCurve, QPropertyAnimation, QSize
 from PySide6.QtWidgets import (
@@ -42,6 +43,110 @@ def _stars(rating: Optional[int]) -> str:
         return "—"
     five = max(1, min(5, round(rating / 2)))
     return "★" * five + "☆" * (5 - five)
+
+def _relative_time(dt: Optional[datetime]) -> str:
+    """Convert datetime to human-readable relative time."""
+    if dt is None:
+        return ""
+    from datetime import datetime as dt_module
+    now = dt_module.now()
+    diff = now - dt
+
+    seconds = diff.total_seconds()
+    if seconds < 0:
+        return "just now"
+
+    minutes = seconds / 60
+    hours = minutes / 60
+    days = hours / 24
+    weeks = days / 7
+    months = days / 30
+
+    if seconds < 60:
+        return "just now"
+    elif minutes < 60:
+        m = int(minutes)
+        return f"{m}m ago"
+    elif hours < 24:
+        h = int(hours)
+        return f"{h}h ago"
+    elif days < 7:
+        d = int(days)
+        return f"{d}d ago"
+    elif weeks < 4:
+        w = int(weeks)
+        return f"{w}w ago"
+    elif months < 12:
+        m = int(months)
+        return f"{m}mo ago"
+    else:
+        return dt.strftime("%b %Y")
+
+class SkeletonCard(QFrame):
+    """Placeholder card shown during loading with animated shimmer effect."""
+
+    def __init__(self, view_mode: str = "comfortable", parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFrameShape(QFrame.StyledPanel)
+        theme = current_theme()
+        pad = theme.spacing_md if view_mode == "comfortable" else theme.spacing_sm
+
+        self.setStyleSheet(
+            f"QFrame {{ {card_style(theme)} }}"
+        )
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setMinimumHeight(200 if view_mode == "comfortable" else 150)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(pad, pad, pad, pad)
+        layout.setSpacing(8)
+
+        # Skeleton icon area
+        icon_skeleton = QFrame()
+        icon_skeleton.setStyleSheet(
+            f"background: {theme.surface_alt.name(QColor.HexArgb)}; "
+            f"border-radius: 12px;"
+        )
+        icon_ratio = 0.78 if view_mode == "comfortable" else 0.6
+        icon_skeleton.setMinimumHeight(int(self.minimumHeight() * icon_ratio))
+        layout.addWidget(icon_skeleton)
+
+        # Skeleton title
+        title_skeleton = QFrame()
+        title_skeleton.setFixedHeight(16)
+        title_skeleton.setStyleSheet(
+            f"background: {theme.surface_alt.lighter(105).name(QColor.HexArgb)}; "
+            f"border-radius: 4px;"
+        )
+        layout.addWidget(title_skeleton)
+
+        # Skeleton subtitle
+        subtitle_skeleton = QFrame()
+        subtitle_skeleton.setFixedHeight(12)
+        subtitle_skeleton.setFixedWidth(120)
+        subtitle_skeleton.setStyleSheet(
+            f"background: {theme.surface_alt.name(QColor.HexArgb)}; "
+            f"border-radius: 3px;"
+        )
+        layout.addWidget(subtitle_skeleton)
+
+        layout.addStretch(1)
+
+        # Pulse animation for shimmer effect
+        self._opacity = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._opacity)
+        self._pulse_anim = QPropertyAnimation(self._opacity, b"opacity", self)
+        self._pulse_anim.setDuration(1200)
+        self._pulse_anim.setStartValue(0.4)
+        self._pulse_anim.setEndValue(0.8)
+        self._pulse_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self._pulse_anim.setLoopCount(-1)  # Infinite loop
+        self._pulse_anim.start()
+
+    def stop_animation(self) -> None:
+        """Stop the shimmer animation."""
+        self._pulse_anim.stop()
+
 
 class GameCard(QFrame):
     clicked = Signal(str)        # game_id
@@ -233,6 +338,19 @@ class GameCard(QFrame):
             rating_btn = chip_btn(rating_text, theme.accent_alt.lighter(140), "Click to set rating")
             rating_btn.clicked.connect(lambda: self._pick_rating())
             meta.addWidget(rating_btn)
+
+        # Last played badge
+        last_played_text = _relative_time(game.last_played)
+        if last_played_text and self.chip_level != "narrow":
+            last_played_lbl = QLabel(f"⏱ {last_played_text}")
+            last_played_lbl.setStyleSheet(
+                f"color: {theme.text_muted.name()}; "
+                f"font-size: 10px; "
+                f"padding: 2px 6px; "
+                f"background: transparent;"
+            )
+            last_played_lbl.setToolTip(f"Last played: {game.last_played.strftime('%Y-%m-%d %H:%M') if game.last_played else 'Never'}")
+            meta.addWidget(last_played_lbl)
 
         # update chip if applicable
         inst_vi = parse_version(game.installed_version_raw) if game.installed_version_raw else None
@@ -772,6 +890,32 @@ class GameGrid(QWidget):
             _log.debug("grid_refresh")
         self._render_reason = "refresh"
         self._render()
+
+    def show_skeleton_loading(self, count: int = 8) -> None:
+        """Show skeleton loading cards."""
+        self._clear_grid()
+        self._skeleton_cards: List[SkeletonCard] = []
+
+        width = max(240, self.scroll.viewport().width())
+        card_w = 260 if self._view_mode == "comfortable" else 200
+        cols = max(1, width // card_w)
+
+        for idx in range(count):
+            skeleton = SkeletonCard(view_mode=self._view_mode, parent=self.container)
+            self._skeleton_cards.append(skeleton)
+            row = idx // cols
+            col = idx % cols
+            self.grid.addWidget(skeleton, row, col)
+
+        self._stack.setCurrentIndex(1)  # Show grid with skeletons
+
+    def hide_skeleton_loading(self) -> None:
+        """Remove skeleton cards and prepare for real content."""
+        if hasattr(self, '_skeleton_cards'):
+            for skeleton in self._skeleton_cards:
+                skeleton.stop_animation()
+                skeleton.deleteLater()
+            self._skeleton_cards.clear()
 
     # ---- helpers ----
     def _ensure_overlay(self) -> None:

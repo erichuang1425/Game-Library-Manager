@@ -127,6 +127,10 @@ class MainWindow(QMainWindow):
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search games, tags, notes…")
+        self.search.setToolTip(
+            "Search by title, tags, or notes.\n"
+            "Advanced syntax: status:playing, tag:rpg, rating:>7, has:source"
+        )
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(350)
         self.search.textChanged.connect(self._apply_search)
@@ -229,11 +233,15 @@ class MainWindow(QMainWindow):
         # Filter / controls bar
         controls = QHBoxLayout()
         controls.setSpacing(8)
-        # quick pills
+        # quick pills with tooltips
         self.pill_all = QPushButton("All")
+        self.pill_all.setToolTip("Show all games in your library")
         self.pill_missing = QPushButton("Missing")
+        self.pill_missing.setToolTip("Show games with missing shortcut files")
         self.pill_updates = QPushButton("Updates")
+        self.pill_updates.setToolTip("Show games with available updates")
         self.pill_source = QPushButton("Source")
+        self.pill_source.setToolTip("Show games with a source URL")
         for btn in (self.pill_all, self.pill_missing, self.pill_updates, self.pill_source):
             btn.setCheckable(True)
             btn.clicked.connect(self._on_quick_filter)
@@ -249,9 +257,10 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.tag_filter_label)
         controls.addWidget(self.clear_tag_btn)
 
-        # dropdown filters
+        # dropdown filters with tooltips
         self.status_filter = QComboBox()
         self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
+        self.status_filter.setToolTip("Filter by game play status")
         status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
         self.status_filter.setCurrentText(status_label)
         self.status_filter.currentTextChanged.connect(self._on_filter_changed)
@@ -260,6 +269,7 @@ class MainWindow(QMainWindow):
 
         self.conf_filter = QComboBox()
         self.conf_filter.addItems(["All", "High", "Medium", "Low"])
+        self.conf_filter.setToolTip("Filter by metadata confidence level")
         confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
         self.conf_filter.setCurrentText(confidence_label)
         self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
@@ -268,14 +278,16 @@ class MainWindow(QMainWindow):
 
         self.type_filter = QComboBox()
         self.type_filter.addItems(["All", "lnk", "url", "html"])
+        self.type_filter.setToolTip("Filter by shortcut file type")
         self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
         self.type_filter.currentTextChanged.connect(self._on_filter_changed)
         controls.addWidget(QLabel("Type:"))
         controls.addWidget(self.type_filter)
 
-        # sort
+        # sort with tooltip
         self.sort_combo = QComboBox()
         self.sort_combo.addItems(["Title", "Last Played", "Rating", "Launch Count", "Last Checked"])
+        self.sort_combo.setToolTip("Change how games are sorted in the grid")
         self.sort_combo.setCurrentText({
             "title": "Title",
             "last_played": "Last Played",
@@ -287,17 +299,20 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("Sort:"))
         controls.addWidget(self.sort_combo)
 
-        # view toggle
+        # view toggle with tooltips
         self.view_comfort = QPushButton("Comfortable")
+        self.view_comfort.setToolTip("Larger cards with more details (200px height)")
         self.view_compact = QPushButton("Compact")
+        self.view_compact.setToolTip("Smaller cards to see more games (150px height)")
         for btn in (self.view_comfort, self.view_compact):
             btn.setCheckable(True)
             btn.clicked.connect(self._on_view_mode_changed)
         controls.addWidget(self.view_comfort)
         controls.addWidget(self.view_compact)
 
-        # focus mode
+        # focus mode with tooltip
         self.focus_btn = QPushButton("Focus")
+        self.focus_btn.setToolTip("Hide side panels for full-width game grid")
         self.focus_btn.setCheckable(True)
         self.focus_btn.clicked.connect(self._toggle_focus_mode)
         self.focus_btn.setChecked(self._focus_mode)
@@ -305,13 +320,15 @@ class MainWindow(QMainWindow):
 
         self.details_toggle = QToolButton()
         self.details_toggle.setText("Details")
+        self.details_toggle.setToolTip("Show/hide the game details panel")
         self.details_toggle.setCheckable(True)
         self.details_toggle.setChecked(self._details_visible)
         self.details_toggle.clicked.connect(self._toggle_details_panel)
         controls.addWidget(self.details_toggle)
 
-        # Multi-select mode button
+        # Multi-select mode button with tooltip
         self.select_btn = QPushButton("Select")
+        self.select_btn.setToolTip("Enable multi-select mode (Ctrl+Click to select multiple games)")
         self.select_btn.setCheckable(True)
         self.select_btn.clicked.connect(self._toggle_multi_select_mode)
         controls.addWidget(self.select_btn)
