@@ -450,13 +450,22 @@ class GameGrid(QWidget):
     updates_requested = Signal(str)
     rating_changed = Signal(str, object)
     tag_filter_requested = Signal(str)
+    scan_requested = Signal()  # emitted when user clicks scan from empty state
 
     def __init__(self) -> None:
         super().__init__()
+        self._focused_index: int = -1  # keyboard navigation index
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(8)
+
+        # Stacked layout for empty state vs grid
+        self._stack = QStackedLayout()
+
+        # Empty state widget
+        self._empty_state = self._build_empty_state()
+        self._stack.addWidget(self._empty_state)
 
         # Scroll area for cards
         self.scroll = QScrollArea()
@@ -469,7 +478,11 @@ class GameGrid(QWidget):
         self.container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.scroll.setWidget(self.container)
-        outer.addWidget(self.scroll, 1)
+        self._stack.addWidget(self.scroll)
+
+        stack_widget = QWidget()
+        stack_widget.setLayout(self._stack)
+        outer.addWidget(stack_widget, 1)
 
         # lightweight loading overlay shown during costly renders
         self._loading_overlay: QFrame | None = None
@@ -490,9 +503,11 @@ class GameGrid(QWidget):
 
     def set_games(self, games: List[Game]) -> None:
         self._games = games or []
+        self._focused_index = -1  # reset keyboard focus on data change
         self._render_reason = "set_games"
         if self._rate.allow("set_games", interval_ms=500):
             _log.info("set_games %s", kv(count=len(self._games)))
+        self._update_empty_state_visibility()
         self._render()
 
     def set_view_mode(self, mode: str) -> None:
@@ -699,3 +714,179 @@ class GameGrid(QWidget):
             return
         if self.width() > 0 and self.height() > 0:
             self._loading_overlay.setGeometry(self.rect())
+
+    def _build_empty_state(self) -> QWidget:
+        """Build the empty state widget shown when no games are present."""
+        theme = current_theme()
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(40, 60, 40, 60)
+        layout.setSpacing(16)
+
+        layout.addStretch(2)
+
+        # Icon placeholder (using unicode game controller)
+        icon_label = QLabel("🎮")
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setStyleSheet(f"font-size: 64px; color: {theme.text_muted.name()};")
+        layout.addWidget(icon_label)
+
+        # Title
+        title = QLabel("No games in your library")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"font-size: 20px; font-weight: 600; color: {theme.text.name()};")
+        layout.addWidget(title)
+
+        # Description
+        desc = QLabel("Scan your shortcuts folder to add games, or check your search filters.")
+        desc.setAlignment(Qt.AlignCenter)
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"font-size: 13px; color: {theme.text_muted.name()}; max-width: 400px;")
+        layout.addWidget(desc)
+
+        layout.addSpacing(12)
+
+        # Action buttons row
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+        btn_row.addStretch(1)
+
+        scan_btn = QPushButton("Scan Shortcuts")
+        scan_btn.setMinimumWidth(140)
+        scan_btn.setStyleSheet(
+            f"QPushButton {{ "
+            f"background: {theme.accent.name()}; "
+            f"color: {theme.bg.name()}; "
+            f"padding: 10px 20px; "
+            f"border-radius: {theme.radius_md}px; "
+            f"font-weight: 600; "
+            f"font-size: 13px; "
+            f"border: none; "
+            f"}} "
+            f"QPushButton:hover {{ background: {theme.accent.lighter(110).name()}; }}"
+        )
+        scan_btn.setCursor(Qt.PointingHandCursor)
+        scan_btn.clicked.connect(lambda: self.scan_requested.emit())
+        btn_row.addWidget(scan_btn)
+
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
+        layout.addStretch(3)
+
+        return widget
+
+    def _update_empty_state_visibility(self) -> None:
+        """Show empty state when no games, otherwise show grid."""
+        if not self._games:
+            self._stack.setCurrentIndex(0)  # empty state
+        else:
+            self._stack.setCurrentIndex(1)  # grid
+
+    # ---- Keyboard Navigation ----
+    def keyPressEvent(self, event) -> None:
+        """Handle keyboard navigation in the grid."""
+        if not self._games:
+            super().keyPressEvent(event)
+            return
+
+        key = event.key()
+        cols = self._get_column_count()
+
+        if key == Qt.Key_Right:
+            self._move_focus(1, cols)
+        elif key == Qt.Key_Left:
+            self._move_focus(-1, cols)
+        elif key == Qt.Key_Down:
+            self._move_focus(cols, cols)
+        elif key == Qt.Key_Up:
+            self._move_focus(-cols, cols)
+        elif key == Qt.Key_Return or key == Qt.Key_Enter:
+            self._activate_focused()
+        elif key == Qt.Key_Space:
+            self._play_focused()
+        else:
+            super().keyPressEvent(event)
+
+    def _get_column_count(self) -> int:
+        """Calculate current number of columns based on viewport width."""
+        width = max(240, self.scroll.viewport().width())
+        card_w = 260 if self._view_mode == "comfortable" else 200
+        return max(1, width // card_w)
+
+    def _move_focus(self, delta: int, cols: int) -> None:
+        """Move focus by delta positions."""
+        if not self._games:
+            return
+
+        new_idx = self._focused_index + delta
+        if new_idx < 0:
+            new_idx = 0
+        elif new_idx >= len(self._games):
+            new_idx = len(self._games) - 1
+
+        if new_idx != self._focused_index:
+            self._set_focus_index(new_idx)
+
+    def _set_focus_index(self, idx: int) -> None:
+        """Set focus to the card at the given index."""
+        # Clear previous focus styling
+        if 0 <= self._focused_index < self.grid.count():
+            old_item = self.grid.itemAt(self._focused_index)
+            if old_item and old_item.widget():
+                self._apply_focus_style(old_item.widget(), False)
+
+        self._focused_index = idx
+
+        # Apply focus styling to new card
+        if 0 <= idx < self.grid.count():
+            item = self.grid.itemAt(idx)
+            if item and item.widget():
+                card = item.widget()
+                self._apply_focus_style(card, True)
+                # Scroll to ensure card is visible
+                self.scroll.ensureWidgetVisible(card, 50, 50)
+                # Emit selection
+                if isinstance(card, GameCard):
+                    self.game_selected.emit(card.game.game_id)
+
+    def _apply_focus_style(self, card: QWidget, focused: bool) -> None:
+        """Apply or remove focus styling from a card."""
+        if not isinstance(card, GameCard):
+            return
+        theme = current_theme()
+        if focused:
+            card.setStyleSheet(
+                f"QFrame {{ {card_style(theme)} border: 2px solid {theme.focus.name()}; }}"
+                f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
+            )
+        else:
+            card.setStyleSheet(
+                f"QFrame {{ {card_style(theme)} }}"
+                f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
+            )
+
+    def _activate_focused(self) -> None:
+        """Activate (select) the currently focused card."""
+        if 0 <= self._focused_index < len(self._games):
+            game = self._games[self._focused_index]
+            self.game_selected.emit(game.game_id)
+
+    def _play_focused(self) -> None:
+        """Play the currently focused game."""
+        if 0 <= self._focused_index < len(self._games):
+            game = self._games[self._focused_index]
+            self.game_play.emit(game.game_id)
+
+    def focus_first(self) -> None:
+        """Focus the first card in the grid."""
+        if self._games:
+            self._set_focus_index(0)
+
+    def clear_focus(self) -> None:
+        """Clear keyboard focus from the grid."""
+        if 0 <= self._focused_index < self.grid.count():
+            item = self.grid.itemAt(self._focused_index)
+            if item and item.widget():
+                self._apply_focus_style(item.widget(), False)
+        self._focused_index = -1
