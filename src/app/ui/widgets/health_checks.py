@@ -4,6 +4,7 @@ from typing import List, Tuple
 
 from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6 import QtGui
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
     QPushButton, QHBoxLayout, QAbstractItemView, QLineEdit, QFrame
@@ -13,6 +14,8 @@ from app.models import Game
 from app.services import parse_version, compare_versions
 from app.services.version_parser import CompareResult
 from app.logging_utils import get_logger, kv, connect_safe, RateLimiter
+from app.ui.theme import current_theme, chip_style
+from app.ui.typography import get_scale, heading_style
 
 _log = get_logger("ui.health")
 _rate = RateLimiter()
@@ -28,29 +31,44 @@ class HealthChecksWidget(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self._theme = current_theme()
+        theme = self._theme
+        scale = get_scale()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(theme.spacing_sm)
 
         title = QLabel("Health Checks")
-        title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        title.setStyleSheet(heading_style(theme, scale))
         layout.addWidget(title)
 
         pill_row = QHBoxLayout()
-        self.filter_all = QPushButton("All")
-        self.filter_errors = QPushButton("Errors")
-        self.filter_warn = QPushButton("Warnings")
-        self.filter_missing_source = QPushButton("Missing Source")
-        self.filter_missing_archive = QPushButton("Missing Archive")
-        for btn in (self.filter_all, self.filter_errors, self.filter_warn, self.filter_missing_source, self.filter_missing_archive):
+        pill_row.setSpacing(theme.spacing_xs)
+
+        def make_filter_btn(text: str) -> QPushButton:
+            btn = QPushButton(text)
             btn.setCheckable(True)
+            btn.setStyleSheet(f"""
+                QPushButton {{ {chip_style(theme)} }}
+                QPushButton:checked {{ {chip_style(theme, active=True)} }}
+                QPushButton:hover {{ border-color: {theme.focus.name(QColor.HexArgb)}; }}
+            """)
             connect_safe(btn.clicked, self._on_filter_clicked, _log, "health_filter_click")
+            return btn
+
+        self.filter_all = make_filter_btn("All")
+        self.filter_errors = make_filter_btn("Errors")
+        self.filter_warn = make_filter_btn("Warnings")
+        self.filter_missing_source = make_filter_btn("Missing Source")
+        self.filter_missing_archive = make_filter_btn("Missing Archive")
+        for btn in (self.filter_all, self.filter_errors, self.filter_warn, self.filter_missing_source, self.filter_missing_archive):
             pill_row.addWidget(btn)
         pill_row.addStretch(1)
-        self.density_comfort = QPushButton("Comfort")
-        self.density_compact = QPushButton("Compact")
+        self.density_comfort = make_filter_btn("Comfort")
+        self.density_compact = make_filter_btn("Compact")
         for btn in (self.density_comfort, self.density_compact):
-            btn.setCheckable(True)
+            btn.clicked.disconnect()
             connect_safe(btn.clicked, self._on_density_clicked, _log, "health_density_click")
             pill_row.addWidget(btn)
         layout.addLayout(pill_row)
