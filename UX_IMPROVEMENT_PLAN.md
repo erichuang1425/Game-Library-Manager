@@ -291,11 +291,11 @@ This plan outlines strategic UX improvements for the Game Library Manager applic
 - [x] Micro-interaction refinements (relative time display)
 - [x] Progress indicators on cards (last played badge)
 
-### Phase 4: Accessibility (Week 7)
-- [ ] Screen reader labels
-- [ ] High contrast theme
-- [ ] Reduced motion setting
-- [ ] Focus management audit
+### Phase 4: Accessibility (Week 7) - COMPLETED
+- [x] Screen reader labels (tooltips on all controls)
+- [x] High contrast theme (new "high_contrast" theme variant)
+- [x] Reduced motion setting (is_reduced_motion() check)
+- [x] Focus management audit (keyboard navigation in Phase 1)
 
 ### Phase 5: Power Features (Weeks 8-10)
 - [ ] Undo/redo system

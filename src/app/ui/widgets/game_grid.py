@@ -16,7 +16,7 @@ from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, icon_for_path, best_icon_path, extract_dominant_color
 from app.services.version_parser import CompareResult
 from app.models import game
-from app.ui.theme import current_theme, card_style, chip_style
+from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion
 from app.logging_utils import get_logger, kv, RateLimiter, wrap_slot
 import time
 
@@ -132,20 +132,23 @@ class SkeletonCard(QFrame):
 
         layout.addStretch(1)
 
-        # Pulse animation for shimmer effect
-        self._opacity = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self._opacity)
-        self._pulse_anim = QPropertyAnimation(self._opacity, b"opacity", self)
-        self._pulse_anim.setDuration(1200)
-        self._pulse_anim.setStartValue(0.4)
-        self._pulse_anim.setEndValue(0.8)
-        self._pulse_anim.setEasingCurve(QEasingCurve.InOutSine)
-        self._pulse_anim.setLoopCount(-1)  # Infinite loop
-        self._pulse_anim.start()
+        # Pulse animation for shimmer effect (respects reduced motion)
+        self._pulse_anim = None
+        if not is_reduced_motion():
+            self._opacity = QGraphicsOpacityEffect(self)
+            self.setGraphicsEffect(self._opacity)
+            self._pulse_anim = QPropertyAnimation(self._opacity, b"opacity", self)
+            self._pulse_anim.setDuration(1200)
+            self._pulse_anim.setStartValue(0.4)
+            self._pulse_anim.setEndValue(0.8)
+            self._pulse_anim.setEasingCurve(QEasingCurve.InOutSine)
+            self._pulse_anim.setLoopCount(-1)  # Infinite loop
+            self._pulse_anim.start()
 
     def stop_animation(self) -> None:
         """Stop the shimmer animation."""
-        self._pulse_anim.stop()
+        if self._pulse_anim:
+            self._pulse_anim.stop()
 
 
 class GameCard(QFrame):
@@ -605,6 +608,10 @@ class GameCard(QFrame):
         Args:
             delay_ms: Delay before starting animation (for staggered effect)
         """
+        # Skip animation if reduced motion is enabled
+        if is_reduced_motion():
+            return
+
         # Start invisible
         self._card_opacity = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self._card_opacity)

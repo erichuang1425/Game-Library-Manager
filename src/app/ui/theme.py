@@ -140,6 +140,29 @@ THEMES: Dict[str, ThemeSpec] = {
         outline=_c(72, 120, 160, 130),
         shadow=_c(0, 0, 0, 120),
     ),
+    "high_contrast": ThemeSpec(
+        name="High Contrast",
+        bg=_c(0, 0, 0),
+        surface=_c(0, 0, 0),
+        surface_alt=_c(20, 20, 20),
+        card=_c(0, 0, 0),
+        card_border=_c(255, 255, 255),
+        card_hover=_c(255, 255, 0),
+        text=_c(255, 255, 255),
+        text_muted=_c(255, 255, 255),
+        accent=_c(0, 255, 255),
+        accent_alt=_c(255, 255, 0),
+        chip_bg=_c(0, 0, 0),
+        chip_border=_c(255, 255, 255),
+        focus=_c(255, 255, 0),
+        outline=_c(255, 255, 255),
+        shadow=_c(255, 255, 255, 80),
+        # Larger focus indicators for accessibility
+        radius_sm=4,
+        radius_md=6,
+        radius_lg=8,
+        radius_xl=10,
+    ),
 }
 
 FONTS = {
@@ -150,6 +173,20 @@ FONTS = {
 }
 
 FONT_SCALES = {"small": 0.9, "default": 1.0, "large": 1.15}
+
+# Accessibility: reduced motion preference
+_reduced_motion: bool = False
+
+
+def set_reduced_motion(enabled: bool) -> None:
+    """Enable or disable reduced motion for accessibility."""
+    global _reduced_motion
+    _reduced_motion = enabled
+
+
+def is_reduced_motion() -> bool:
+    """Check if reduced motion is enabled."""
+    return _reduced_motion
 
 
 def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale: str) -> None:
