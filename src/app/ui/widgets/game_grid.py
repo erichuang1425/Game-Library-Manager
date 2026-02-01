@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from shiboken6 import isValid
 
 from app.models import Game
-from app.services import pixmap_for_game, parse_version, compare_versions, icon_for_path, best_icon_path
+from app.services import pixmap_for_game, parse_version, compare_versions, icon_for_path, best_icon_path, extract_dominant_color
 from app.services.version_parser import CompareResult
 from app.models import game
 from app.ui.theme import current_theme, card_style, chip_style
@@ -110,21 +110,37 @@ class GameCard(QFrame):
         self._set_icon_pixmap(icon_height)
         base_layout.addWidget(self.icon_label)
 
+        # Extract ambient color from icon for dynamic accents
+        self._ambient_color: QColor | None = None
+        self._extract_ambient_color()
+
         status_overlay = QWidget()
         status_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
         sw = QHBoxLayout(status_overlay)
-        sw.setContentsMargins(8, 8, 8, 8)
+        sw.setContentsMargins(6, 6, 6, 6)
         sw.setSpacing(0)
-        status_dot = QLabel(" ")
-        status_dot.setFixedSize(12, 12)
-        status_color = {
-            "backlog": "#5cc1ff",
-            "playing": "#7bed9f",
-            "finished": "#ffa94d",
-            "dropped": "#ef6c00",
-        }.get(game.status, "#5cc1ff")
-        status_dot.setStyleSheet(f"background:{status_color}; border-radius:6px;")
-        sw.addWidget(status_dot, 0, Qt.AlignLeft | Qt.AlignTop)
+
+        # Enhanced status badge with icon and subtle styling
+        status_colors = {
+            "backlog": ("#5cc1ff", "○"),   # Light blue, circle
+            "playing": ("#7bed9f", "▶"),   # Green, play icon
+            "finished": ("#ffa94d", "✓"),  # Orange, check
+            "dropped": ("#ef6c00", "✕"),   # Dark orange, x
+        }
+        status_color, status_icon = status_colors.get(game.status, ("#5cc1ff", "○"))
+
+        status_badge = QLabel(status_icon)
+        status_badge.setFixedSize(20, 20)
+        status_badge.setAlignment(Qt.AlignCenter)
+        status_badge.setStyleSheet(
+            f"background: {status_color}; "
+            f"color: rgba(0,0,0,0.7); "
+            f"border-radius: 10px; "
+            f"font-size: 11px; "
+            f"font-weight: bold;"
+        )
+        status_badge.setToolTip(_status_label(game.status))
+        sw.addWidget(status_badge, 0, Qt.AlignLeft | Qt.AlignTop)
         sw.addStretch(1)
         base_layout.addWidget(status_overlay)
 
@@ -282,6 +298,8 @@ class GameCard(QFrame):
             self.context_action.emit(self.game.game_id, "remove")
 
     def enterEvent(self, event) -> None:
+        # Apply ambient color tint to overlay
+        self._apply_ambient_overlay()
         self.overlay_sheet.setVisible(True)
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
@@ -369,6 +387,59 @@ class GameCard(QFrame):
         pm = QPixmap(size, size)
         pm.fill(self._theme.surface_alt)
         self.icon_label.setPixmap(pm)
+
+    def _extract_ambient_color(self) -> None:
+        """Extract dominant color from icon for ambient accent effects."""
+        pm = self.icon_label.pixmap()
+        if pm and not pm.isNull():
+            self._ambient_color = extract_dominant_color(pm)
+
+    def fade_in(self, delay_ms: int = 0) -> None:
+        """Animate card entrance with fade-in effect.
+
+        Args:
+            delay_ms: Delay before starting animation (for staggered effect)
+        """
+        # Start invisible
+        self._card_opacity = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._card_opacity)
+        self._card_opacity.setOpacity(0.0)
+
+        # Create fade animation
+        self._fade_anim = QPropertyAnimation(self._card_opacity, b"opacity", self)
+        self._fade_anim.setDuration(self._theme.anim_normal)
+        self._fade_anim.setStartValue(0.0)
+        self._fade_anim.setEndValue(1.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Restore shadow effect after fade completes
+        def restore_shadow():
+            if hasattr(self, '_shadow_effect'):
+                self.setGraphicsEffect(self._shadow_effect)
+
+        self._fade_anim.finished.connect(restore_shadow)
+
+        # Start with delay
+        if delay_ms > 0:
+            QTimer.singleShot(delay_ms, self._fade_anim.start)
+        else:
+            self._fade_anim.start()
+
+    def _apply_ambient_overlay(self) -> None:
+        """Apply ambient color tint to overlay sheet on hover."""
+        theme = self._theme
+        if self._ambient_color and self._ambient_color.isValid():
+            # Blend ambient color with surface for subtle tint
+            r = (self._ambient_color.red() + theme.surface_alt.red() * 2) // 3
+            g = (self._ambient_color.green() + theme.surface_alt.green() * 2) // 3
+            b = (self._ambient_color.blue() + theme.surface_alt.blue() * 2) // 3
+            self.overlay_sheet.setStyleSheet(
+                f"QFrame {{ background: rgba({r},{g},{b},215); border-radius: {theme.radius_md}px; }}"
+            )
+        else:
+            self.overlay_sheet.setStyleSheet(
+                f"QFrame {{ background: rgba({theme.surface_alt.red()},{theme.surface_alt.green()},{theme.surface_alt.blue()},204); border-radius: {theme.radius_md}px; }}"
+            )
 
 
 class GameGrid(QWidget):
@@ -555,6 +626,11 @@ class GameGrid(QWidget):
                 _log.exception("add_widget_failed %s", kv(row=row, col=col, game_id=getattr(g, "game_id", "unknown")))
                 card.setParent(None)
                 continue
+
+            # Staggered entrance animation (only for first ~20 visible cards to avoid performance issues)
+            if idx < 20 and self._render_reason in ("set_games", "init"):
+                card.fade_in(delay_ms=idx * 25)
+
             if self._card_rate.allow(f"card_added:{g.game_id}", 800):
                 _log.debug("card_added %s", kv(game_id=g.game_id, row=row, col=col))
 
