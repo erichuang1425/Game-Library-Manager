@@ -24,6 +24,11 @@ import urllib.error
 
 from app.logging_utils import get_logger, kv
 from app.storage.paths import get_app_dir
+from app.services.http_utils import (
+    USER_AGENT_SHORT,
+    create_request,
+    handle_http_error,
+)
 
 _log = get_logger("smart_download")
 
@@ -322,10 +327,8 @@ class LinkValidator:
         metadata: Dict[str, Any] = {}
 
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(url, method="HEAD", headers=headers)
+            # Use shared http_utils for request creation
+            req = create_request(url, method="HEAD")
 
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 metadata["status_code"] = response.status
@@ -339,13 +342,9 @@ class LinkValidator:
                 return True, "", metadata
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return False, "File not found (404)", {"status_code": 404}
-            elif e.code == 403:
-                return False, "Access denied (403)", {"status_code": 403}
-            elif e.code == 429:
-                return False, "Rate limited (429)", {"status_code": 429}
-            return False, f"HTTP error: {e.code}", {"status_code": e.code}
+            # Use shared error handler
+            _, message = handle_http_error(e)
+            return False, message, {"status_code": e.code}
 
         except Exception as e:
             return False, str(e), {}

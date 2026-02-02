@@ -10,10 +10,9 @@ from hashlib import md5
 from app.models import Game
 from app.services.version_parser import parse_version, compare_versions, CompareResult, VersionInfo
 from app.services.f95_parser import extract_f95_version
+from app.services.http_utils import USER_AGENT, create_request, DEFAULT_TIMEOUT
 from app.logging_utils import get_logger
 from app.logging_utils import kv, RateLimiter, timed
-
-UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
 
 _log = get_logger("update_checker")
 _rate = RateLimiter()
@@ -36,8 +35,9 @@ def _fetch(url: str) -> str:
     last_err = None
     for attempt in range(3):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UserAgent})
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            # Use shared http_utils for request creation
+            req = create_request(url)
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
                 text = resp.read().decode("utf-8", errors="ignore")
                 _html_cache[url] = text
                 _html_cache_ts[url] = time.time()
