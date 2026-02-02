@@ -1258,7 +1258,7 @@ class MainWindow(QMainWindow):
         # Toast notification
         if errs:
             show_error(f"Update check: {ok} ok, {len(errs)} failed")
-            lines = "\n".join(f"- {r.get('error')}" for r in errs[:10])
+            lines = "\n".join(f"- {r.get('error', 'Unknown error')}" for r in errs[:10])
             QMessageBox.warning(self, "Some checks failed", lines)
         else:
             show_success(f"Update check complete: {ok} sources checked")
