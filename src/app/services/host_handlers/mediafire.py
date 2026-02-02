@@ -16,6 +16,10 @@ import urllib.error
 
 from .base import HostHandler, ResolvedLink, DownloadResult, ProgressCallback, register_handler
 from app.logging_utils import get_logger
+from app.services.http_utils import (
+    create_request, handle_http_error,
+    DEFAULT_TIMEOUT, EXTENDED_TIMEOUT, CHUNK_SIZE,
+)
 
 _log = get_logger("mediafire_handler")
 
@@ -106,13 +110,11 @@ class MediafireHandler(HostHandler):
             )
 
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            }
-            req = urllib.request.Request(url, headers=headers)
+            # Use shared http_utils with additional Accept header
+            extra_headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+            req = create_request(url, headers=extra_headers)
 
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
                 html_content = response.read().decode("utf-8", errors="ignore")
 
                 # Check for errors
@@ -136,9 +138,8 @@ class MediafireHandler(HostHandler):
                 )
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return ResolvedLink(direct_url="", error="File not found (404)")
-            return ResolvedLink(direct_url="", error=f"HTTP error: {e.code}")
+            _, message = handle_http_error(e)
+            return ResolvedLink(direct_url="", error=message)
 
         except Exception as e:
             _log.warning("mediafire_resolve_error %s", str(e))
@@ -161,13 +162,11 @@ class MediafireHandler(HostHandler):
 
             destination.mkdir(parents=True, exist_ok=True)
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": url,
-            }
-            req = urllib.request.Request(resolved.direct_url, headers=headers)
+            # Use shared http_utils with Referer header
+            extra_headers = {"Referer": url}
+            req = create_request(resolved.direct_url, headers=extra_headers)
 
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=EXTENDED_TIMEOUT) as response:
                 # Get filename from Content-Disposition if available
                 content_disp = response.headers.get("Content-Disposition", "")
                 filename = resolved.filename
@@ -185,7 +184,7 @@ class MediafireHandler(HostHandler):
 
                 with open(file_path, "wb") as f:
                     while True:
-                        chunk = response.read(8192)
+                        chunk = response.read(CHUNK_SIZE)
                         if not chunk:
                             break
                         f.write(chunk)
@@ -213,10 +212,7 @@ class MediafireHandler(HostHandler):
             return False, "Invalid MediaFire URL"
 
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(url, headers=headers)
+            req = create_request(url)
 
             with urllib.request.urlopen(req, timeout=15) as response:
                 html_content = response.read().decode("utf-8", errors="ignore")
@@ -233,9 +229,8 @@ class MediafireHandler(HostHandler):
                 return False, "Download button not found"
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return False, "File not found"
-            return False, f"HTTP error: {e.code}"
+            _, message = handle_http_error(e)
+            return False, message
 
         except Exception as e:
             return False, str(e)
