@@ -13,3 +13,4 @@ from .batch_toolbar import BatchToolbar
 from .search_bar import (
     EnhancedSearchBar, SearchParser, ParsedSearch, RecentSearches
 )
+from .downloads_panel import DownloadsPanel, DownloadItemWidget
