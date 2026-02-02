@@ -197,15 +197,22 @@ class DownloadWorker(QThread):
                             if self._paused:
                                 item.status = DownloadStatus.PAUSED
                                 self.status_changed.emit(item.download_id, "paused")
-                                # Wait for unpause or cancel
-                                while self._paused and not self._cancelled:
-                                    self._mutex.unlock()
-                                    time.sleep(0.1)
-                                    self._mutex.lock()
+
+                        # Handle pause state outside the lock to avoid deadlock risk
+                        while True:
+                            with QMutexLocker(self._mutex):
                                 if self._cancelled:
                                     item.status = DownloadStatus.CANCELLED
                                     self.status_changed.emit(item.download_id, "cancelled")
                                     return
+                                if not self._paused:
+                                    break
+                            # Sleep OUTSIDE the lock - safe for pause/resume
+                            time.sleep(0.1)
+
+                        # Resumed from pause - update timing
+                        with QMutexLocker(self._mutex):
+                            if item.status == DownloadStatus.PAUSED:
                                 item.status = DownloadStatus.DOWNLOADING
                                 self.status_changed.emit(item.download_id, "downloading")
                                 start_time = time.time()
