@@ -15,7 +15,6 @@ from shiboken6 import isValid
 from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, icon_for_path, best_icon_path, extract_dominant_color
 from app.services.version_parser import CompareResult
-from app.models import game
 from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion
 from app.logging_utils import get_logger, kv, RateLimiter, wrap_slot
 import time
