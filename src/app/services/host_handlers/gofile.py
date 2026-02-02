@@ -28,13 +28,25 @@ class GofileHandler(HostHandler):
     1. Get a guest account token
     2. Use token to access content API
     3. Get direct download link
+
+    Gofile is generally generous with limits but can rate limit heavy use.
     """
 
     SUPPORTED_DOMAINS = ["gofile.io"]
     DISPLAY_NAME = "Gofile"
     REQUIRES_AUTH = False
+    PRIORITY = 2  # Good reliability, minimal limits
+    HAS_DAILY_LIMIT = False  # Generally no strict limit
 
     API_BASE = "https://api.gofile.io"
+
+    # Error patterns
+    ERROR_PATTERNS = [
+        "notFound",
+        "not found",
+        "expired",
+        "rate limit",
+    ]
 
     def __init__(self) -> None:
         super().__init__()
@@ -197,3 +209,39 @@ class GofileHandler(HostHandler):
         except Exception as e:
             _log.warning("gofile_download_error %s", str(e))
             return DownloadResult(success=False, error=str(e))
+
+    def check_availability(self, url: str) -> tuple[bool, str]:
+        """Check if content is available on Gofile."""
+        content_id = self._extract_content_id(url)
+        if not content_id:
+            return False, "Invalid Gofile URL"
+
+        token = self._get_token()
+        if not token:
+            return False, "Could not get access token"
+
+        try:
+            info_url = f"{self.API_BASE}/getContent?contentId={content_id}&token={token}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            }
+            req = urllib.request.Request(info_url, headers=headers)
+
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                status = data.get("status", "")
+
+                if status == "ok":
+                    return True, ""
+                elif status == "error-notFound":
+                    return False, "Content not found"
+                else:
+                    return False, f"Error: {status}"
+
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return False, "Content not found"
+            return False, f"HTTP error: {e.code}"
+
+        except Exception as e:
+            return False, str(e)

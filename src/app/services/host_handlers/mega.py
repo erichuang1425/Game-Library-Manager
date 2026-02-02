@@ -31,11 +31,25 @@ class MegaHandler(HostHandler):
 
     For simplicity, this handler tries to use the mega.py library
     if available, otherwise provides basic URL parsing.
+
+    Note: MEGA has transfer quota limits (~5GB every 6 hours for free users).
     """
 
     SUPPORTED_DOMAINS = ["mega.nz", "mega.co.nz"]
     DISPLAY_NAME = "MEGA"
     REQUIRES_AUTH = False  # Public links don't need auth
+    PRIORITY = 4  # Has limits and requires special library
+    HAS_DAILY_LIMIT = True
+    DAILY_LIMIT_GB = 5.0
+
+    # Error patterns indicating quota/limit
+    LIMIT_ERROR_PATTERNS = [
+        "transfer quota",
+        "bandwidth limit",
+        "over quota",
+        "temporarily unavailable",
+        "too many connections",
+    ]
 
     def __init__(self) -> None:
         super().__init__()
