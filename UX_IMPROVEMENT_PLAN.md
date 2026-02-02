@@ -300,9 +300,9 @@ This plan outlines strategic UX improvements for the Game Library Manager applic
 ### Phase 5: Power Features (Weeks 8-10) - COMPLETED
 - [x] Import/export functionality (JSON, CSV, Markdown export; JSON/CSV import with merge strategies)
 - [x] Keyboard shortcuts for common actions (Ctrl+F, Ctrl+E, Ctrl+I, Ctrl+D, Escape, etc.)
-- [ ] Undo/redo system (deferred to future)
-- [ ] Theme editor (deferred to future)
-- [ ] Layout customization (deferred to future)
+- [x] Undo/redo system (Command pattern with UndoStack, Ctrl+Z/Ctrl+Y shortcuts)
+- [x] Theme editor (Full color and design token customization with live preview, import/export)
+- [x] Layout customization (Panel visibility, positions, sizes, card field selection)
 
 ---
 
