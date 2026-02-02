@@ -54,7 +54,7 @@ class LayoutConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "LayoutConfig":
         """Create from dictionary."""
         # Handle missing fields gracefully
-        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        valid_fields = set(cls.__dataclass_fields__.keys())
         filtered = {k: v for k, v in data.items() if k in valid_fields}
         return cls(**filtered)
 

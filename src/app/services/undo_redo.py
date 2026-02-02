@@ -112,8 +112,8 @@ class BatchGameChangeCommand(Command):
 
     def undo(self) -> None:
         for game in self.games:
-            old_val = self.old_values.get(game.game_id)
-            if old_val is not None:
+            if game.game_id in self.old_values:
+                old_val = self.old_values[game.game_id]
                 setattr(game, self.field_name, old_val)
         if self.save_callback:
             self.save_callback()
