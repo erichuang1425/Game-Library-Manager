@@ -15,6 +15,7 @@ import urllib.error
 
 from .base import HostHandler, ResolvedLink, DownloadResult, ProgressCallback, register_handler
 from app.logging_utils import get_logger
+from app.services.http_utils import create_request, handle_http_error, DEFAULT_TIMEOUT
 
 _log = get_logger("pixeldrain_handler")
 
@@ -77,15 +78,11 @@ class PixeldrainHandler(HostHandler):
             )
 
         try:
-            # Get file info from API
+            # Get file info from API using shared http_utils
             info_url = f"{self.API_BASE}/file/{file_id}/info"
+            req = create_request(info_url)
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(info_url, headers=headers)
-
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
                 data = json.loads(response.read().decode("utf-8"))
 
                 filename = data.get("name", f"pixeldrain_{file_id}")
@@ -100,9 +97,8 @@ class PixeldrainHandler(HostHandler):
                 )
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return ResolvedLink(direct_url="", error="File not found")
-            return ResolvedLink(direct_url="", error=f"HTTP error: {e.code}")
+            _, message = handle_http_error(e)
+            return ResolvedLink(direct_url="", error=message)
 
         except Exception as e:
             _log.warning("pixeldrain_resolve_error %s", str(e))
@@ -120,10 +116,7 @@ class PixeldrainHandler(HostHandler):
 
         try:
             info_url = f"{self.API_BASE}/file/{file_id}/info"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(info_url, headers=headers)
+            req = create_request(info_url)
 
             with urllib.request.urlopen(req, timeout=15) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -132,20 +125,20 @@ class PixeldrainHandler(HostHandler):
                 return True, ""
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return False, "File not found"
-            elif e.code == 429:
-                return False, "Rate limited - daily bandwidth limit may be reached"
-            # Try to read error message
+            # Try to read error message from response body
             try:
                 error_data = json.loads(e.read().decode("utf-8"))
-                error_msg = error_data.get("message", f"HTTP error: {e.code}")
+                error_msg = error_data.get("message", "")
                 # Check for limit errors
                 if any(p in error_msg.lower() for p in self.LIMIT_ERROR_PATTERNS):
                     return False, f"Daily limit reached: {error_msg}"
-                return False, error_msg
+                if error_msg:
+                    return False, error_msg
             except Exception:
-                return False, f"HTTP error: {e.code}"
+                pass
+            # Fall back to standard error handling
+            _, message = handle_http_error(e)
+            return False, message
 
         except Exception as e:
             return False, str(e)
