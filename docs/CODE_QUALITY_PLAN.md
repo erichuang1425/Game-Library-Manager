@@ -977,9 +977,11 @@ class TestDownloadManager:
 - [x] Migrate `smart_download.py` to use `http_utils`
 - [x] Migrate `update_checker.py` to use `http_utils`
 
-### Sprint 3: Modularization Part 1 (Week 5-6)
+### Sprint 3: Modularization Part 1 (Week 5-6) 🔄 IN PROGRESS
 
-- [ ] MOD-001: Split `main_window.py`
+- [x] Create `filter_utils.py` module - filtering, sorting, search utilities
+- [x] Migrate `main_window.py` to use filter utilities (reduced ~65 lines)
+- [ ] MOD-001: Split `main_window.py` into focused modules
 - [ ] MOD-002: Split `game_grid.py`
 - [ ] Update all imports and tests
 
@@ -1057,6 +1059,19 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ## Changelog
 
+### Version 1.4 (2026-02-02)
+- Started Sprint 3: Modularization Part 1
+- Created `filter_utils.py` module (~250 lines):
+  - `FilterConfig` dataclass for filter state
+  - `is_game_missing()`, `game_needs_update()` - game status checks
+  - `apply_quick_filter()`, `apply_dropdown_filters()`, `apply_search_filter()` - filter pipelines
+  - `sort_games()`, `filter_and_sort_games()` - sorting utilities
+  - `count_quick_filter_matches()` - counting utility
+- Migrated `main_window.py` to use filter utilities:
+  - `_apply_search()` reduced from ~130 lines to ~65 lines
+  - `_update_quick_filter_counts()` simplified to use utility function
+- Improved code testability and reusability
+
 ### Version 1.3 (2026-02-02)
 - Completed remaining P1 bug fixes from Sprint 1:
   - P1-003: Fixed redundant condition in mega.py (line 103)
@@ -1091,5 +1106,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.3*
+*Document Version: 1.4*
 *Last Updated: 2026-02-02*

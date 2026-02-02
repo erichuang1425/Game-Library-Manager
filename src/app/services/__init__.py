@@ -61,3 +61,10 @@ from .bulk_archive_import import (
     BulkArchiveImporter, ImportItem, ImportResult, ImportAction, ImportStatus,
     MatchResult, format_size
 )
+from .filter_utils import (
+    FilterConfig,
+    is_game_missing, game_needs_update,
+    build_search_haystack, match_search,
+    apply_quick_filter, apply_dropdown_filters, apply_search_filter,
+    sort_games, filter_and_sort_games, count_quick_filter_matches,
+)

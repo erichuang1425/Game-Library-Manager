@@ -30,7 +30,11 @@ from app.services import (
     pixmap_for_path, pixmap_for_game,
     export_to_json, export_to_csv, export_to_markdown,
     import_from_json, import_from_csv, merge_imported_games,
-    get_undo_stack, create_field_change, create_multi_field_change, create_batch_change
+    get_undo_stack, create_field_change, create_multi_field_change, create_batch_change,
+    # Filter utilities
+    is_game_missing, game_needs_update,
+    apply_quick_filter, apply_dropdown_filters, apply_search_filter,
+    sort_games, count_quick_filter_matches,
 )
 from app.services.version_parser import CompareResult
 import os
@@ -786,88 +790,24 @@ class MainWindow(QMainWindow):
         # quick filter counts (for pill labels)
         self._update_quick_filter_counts(base)
 
-        # 3) quick filters
-        def is_missing(g: Game) -> bool:
-            p = Path(g.shortcut_path) if g.shortcut_path else None
-            if not p or not p.exists():
-                return True
-            if g.shortcut_type == "lnk" and g.backup_target_path and not Path(g.backup_target_path).exists():
-                return True
-            if g.archive_folder_path and not Path(g.archive_folder_path).exists():
-                return True
-            if g.compressed_archive_path and not Path(g.compressed_archive_path).exists():
-                return True
-            return False
+        # 3) apply quick filter (using utility function)
+        base = apply_quick_filter(base, self._quick_filter)
 
-        def needs_update(g: Game) -> bool:
-            inst_vi = parse_version(g.installed_version_raw) if g.installed_version_raw else None
-            src_vi = parse_version(g.source_version_raw) if g.source_version_raw else None
-            cmp = compare_versions(inst_vi, src_vi)
-            return cmp == CompareResult.OLDER
+        # 4) apply dropdown filters (using utility function)
+        base = apply_dropdown_filters(
+            base,
+            status_filter=self._status_filter,
+            confidence_filter=self._confidence_filter,
+            type_filter=self._type_filter,
+            tag_filter=self._tag_filter,
+        )
 
-        if self._quick_filter == "missing":
-            base = [g for g in base if is_missing(g)]
-        elif self._quick_filter == "updates":
-            base = [g for g in base if needs_update(g)]
-        elif self._quick_filter == "source":
-            base = [g for g in base if g.source_url]
+        # 5) apply search text (using utility function)
+        search_text = self.search.text().strip()
+        self._filtered = apply_search_filter(base, search_text)
 
-        # 4) dropdown filters
-        if self._status_filter != "all":
-            base = [g for g in base if g.status == self._status_filter]
-        if self._confidence_filter != "all":
-            base = [g for g in base if g.confidence == self._confidence_filter]
-        if self._type_filter != "all":
-            base = [g for g in base if (g.shortcut_type or "") == self._type_filter]
-        if self._tag_filter:
-            base = [g for g in base if any(t.lower() == self._tag_filter.lower() for t in g.tags)]
-
-        # 5) apply search text
-        q = self.search.text().strip().lower()
-        if not q:
-            self._filtered = base
-        else:
-            def match(g: Game) -> bool:
-                hay = " ".join([
-                    g.title,
-                    g.status,
-                    g.shortcut_type or "",
-                    g.confidence,
-                    " ".join(g.tags),
-                    g.notes or "",
-                    g.shortcut_path or "",
-                    g.backup_target_path or "",
-                    g.source_url or "",
-                    g.installed_version_raw or "",
-                    g.source_version_raw or "",
-                    g.source_version_num or "" if g.source_version_num else "",
-                    g.source_version_suffix or "",
-                    g.archive_folder_path or "",
-                    g.compressed_archive_path or "",
-                ]).lower()
-                return q in hay
-
-            self._filtered = [g for g in base if match(g)]
-
-        # 6) sort
-        sort_by = self._sort_by
-        if sort_by == "last_played":
-            reverse = True
-            key_fn = lambda g: g.last_played or datetime.min
-        elif sort_by == "rating":
-            reverse = True
-            key_fn = lambda g: g.rating if g.rating is not None else -1
-        elif sort_by == "launch_count":
-            reverse = True
-            key_fn = lambda g: g.launch_count or 0
-        elif sort_by == "last_checked":
-            reverse = True
-            key_fn = lambda g: g.source_checked_at or datetime.min
-        else:
-            reverse = False
-            key_fn = lambda g: g.title.lower()
-
-        self._filtered = sorted(self._filtered, key=key_fn, reverse=reverse)
+        # 6) sort (using utility function)
+        self._filtered = sort_games(self._filtered, self._sort_by)
 
         # If the current selection was filtered out, clear selection/details to avoid stale UI.
         if self._selected_game_id and not any(g.game_id == self._selected_game_id for g in self._filtered):
@@ -1608,24 +1548,12 @@ class MainWindow(QMainWindow):
         self._apply_search()
 
     def _update_quick_filter_counts(self, games: List[Game]) -> None:
-        missing = 0
-        updates = 0
-        source = 0
-        for g in games:
-            p = Path(g.shortcut_path) if g.shortcut_path else None
-            if (not p) or (not p.exists()):
-                missing += 1
-            inst_vi = parse_version(g.installed_version_raw) if g.installed_version_raw else None
-            src_vi = parse_version(g.source_version_raw) if g.source_version_raw else None
-            cmp = compare_versions(inst_vi, src_vi)
-            if cmp == CompareResult.OLDER:
-                updates += 1
-            if g.source_url:
-                source += 1
-        self.pill_all.setText(f"All ({len(games)})")
-        self.pill_missing.setText(f"Missing ({missing})")
-        self.pill_updates.setText(f"Updates ({updates})")
-        self.pill_source.setText(f"Source ({source})")
+        # Use utility function for counting
+        counts = count_quick_filter_matches(games)
+        self.pill_all.setText(f"All ({counts['all']})")
+        self.pill_missing.setText(f"Missing ({counts['missing']})")
+        self.pill_updates.setText(f"Updates ({counts['updates']})")
+        self.pill_source.setText(f"Source ({counts['source']})")
 
     def _update_view_mode_buttons(self) -> None:
         self.view_comfort.setChecked(self._view_mode == "comfortable")
