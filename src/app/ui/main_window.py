@@ -23,6 +23,7 @@ from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.dialogs import ScanWorker, UpdateWorker
 from app.ui.dialogs import PreferencesDialog, ThemeEditorDialog, LayoutCustomizationDialog, LayoutConfig
 from app.ui.dialogs.bulk_source_import import BulkSourceImportDialog
+from app.ui.dialogs.bulk_archive_import_dialog import BulkArchiveImportDialog
 from app.services import (
     find_duplicate_shortcuts_in_root, move_duplicates_to_quarantine,
     launch_game, merge_scanned_into_library, apply_collection, parse_version, compare_versions,
@@ -165,6 +166,8 @@ class MainWindow(QMainWindow):
         tools_menu = QMenu(self)
         act_bulk = QAction("Bulk Source URLs…", self)
         act_bulk.triggered.connect(self._open_bulk_sources)
+        act_bulk_archive = QAction("Bulk Archive Import…", self)
+        act_bulk_archive.triggered.connect(self._open_bulk_archive_import)
         act_scan = QAction("Scanner", self)
         act_scan.triggered.connect(self._open_scanner_project)
         act_settings = QAction("Settings", self)
@@ -176,6 +179,7 @@ class MainWindow(QMainWindow):
         act_data = QAction("Open Data Folder", self)
         act_data.triggered.connect(self._open_data_folder)
         tools_menu.addAction(act_bulk)
+        tools_menu.addAction(act_bulk_archive)
         tools_menu.addAction(act_scan)
         tools_menu.addSeparator()
         tools_menu.addAction(act_settings)
@@ -1307,6 +1311,40 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self._save_bundle()
             self._apply_search()
+
+    def _open_bulk_archive_import(self) -> None:
+        """Open the bulk archive import dialog."""
+        # Determine default folders
+        games_folder = self._settings.get("games_folder", str(Path.home() / "Games"))
+        shortcuts_folder = self._root_folder or str(Path.home() / "Shortcuts")
+
+        dlg = BulkArchiveImportDialog(
+            parent=self,
+            games_folder=games_folder,
+            shortcuts_folder=shortcuts_folder,
+            library=self._all_games,
+        )
+
+        def on_import_complete(new_games):
+            """Handle newly imported games."""
+            for game in new_games:
+                # Check if updating existing
+                existing = next((g for g in self._all_games if g.game_id == game.game_id), None)
+                if existing:
+                    # Update existing game
+                    idx = self._all_games.index(existing)
+                    self._all_games[idx] = game
+                else:
+                    # Add new game
+                    self._all_games.append(game)
+
+            self._save_bundle()
+            self._apply_search()
+            self.sidebar.set_games(self._all_games)
+            self.statusBar().showMessage(f"Imported {len(new_games)} games", 3000)
+
+        dlg.import_complete.connect(on_import_complete)
+        dlg.exec()
 
     def _resolve_issue(self, game_id: str, code: str) -> None:
         self._ignored_health.setdefault(game_id, set()).add(code)

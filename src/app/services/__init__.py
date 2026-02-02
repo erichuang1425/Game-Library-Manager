@@ -34,8 +34,14 @@ from .download_manager import (
     get_download_manager, format_size, format_speed, format_eta
 )
 from .archive_extractor import (
-    ArchiveFormat, ExtractionResult, ArchiveInfo,
+    ArchiveFormat, ExtractionResult, ArchiveInfo, ScannedArchive,
     detect_format, get_archive_info, extract_archive,
     find_executables, find_save_folder,
-    add_custom_password, get_custom_passwords
+    add_custom_password, remove_custom_password, get_custom_passwords,
+    set_custom_passwords, get_all_passwords, load_custom_passwords, save_custom_passwords,
+    scan_for_archives, parse_archive_filename, normalize_title, calculate_title_similarity
+)
+from .bulk_archive_import import (
+    BulkArchiveImporter, ImportItem, ImportResult, ImportAction, ImportStatus,
+    MatchResult, format_size
 )
