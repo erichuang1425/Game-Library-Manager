@@ -8,8 +8,10 @@ Supports:
 - 7z files (requires py7zr)
 - Multi-part archives
 - Password-protected archives
+- Persistent custom password storage
 """
 
+import json
 import os
 import re
 import shutil
@@ -23,6 +25,10 @@ from app.logging_utils import get_logger, kv
 from app.storage.paths import get_app_dir
 
 _log = get_logger("archive_extractor")
+
+# Password storage file
+def _passwords_file() -> Path:
+    return get_app_dir() / "archive_passwords.json"
 
 
 class ArchiveFormat(Enum):
@@ -530,21 +536,63 @@ def extract_archive(
     return result
 
 
-def add_custom_password(password: str) -> None:
+def load_custom_passwords() -> List[str]:
+    """Load custom passwords from persistent storage."""
+    global _custom_passwords
+    try:
+        path = _passwords_file()
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            _custom_passwords = data.get("passwords", [])
+            _log.info("loaded_passwords %s", kv(count=len(_custom_passwords)))
+    except Exception as e:
+        _log.warning("load_passwords_error %s", kv(err=str(e)))
+    return list(_custom_passwords)
+
+
+def save_custom_passwords() -> None:
+    """Save custom passwords to persistent storage."""
+    try:
+        path = _passwords_file()
+        data = {"passwords": _custom_passwords}
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _log.info("saved_passwords %s", kv(count=len(_custom_passwords)))
+    except Exception as e:
+        _log.warning("save_passwords_error %s", kv(err=str(e)))
+
+
+def add_custom_password(password: str, persist: bool = True) -> None:
     """Add a custom password to try."""
     if password and password not in _custom_passwords:
         _custom_passwords.append(password)
+        if persist:
+            save_custom_passwords()
 
 
-def remove_custom_password(password: str) -> None:
+def remove_custom_password(password: str, persist: bool = True) -> None:
     """Remove a custom password."""
     if password in _custom_passwords:
         _custom_passwords.remove(password)
+        if persist:
+            save_custom_passwords()
 
 
 def get_custom_passwords() -> List[str]:
     """Get list of custom passwords."""
     return list(_custom_passwords)
+
+
+def set_custom_passwords(passwords: List[str], persist: bool = True) -> None:
+    """Set the full list of custom passwords."""
+    global _custom_passwords
+    _custom_passwords = list(passwords)
+    if persist:
+        save_custom_passwords()
+
+
+def get_all_passwords() -> List[str]:
+    """Get all passwords to try (common + custom)."""
+    return COMMON_PASSWORDS + _custom_passwords
 
 
 def find_executables(directory: Path) -> List[Path]:
@@ -602,3 +650,204 @@ def find_save_folder(directory: Path) -> Optional[Path]:
             return item
 
     return None
+
+
+# Archive extensions for scanning
+ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z"}
+MULTIPART_FIRST_PATTERNS = [
+    re.compile(r"\.part1\.rar$", re.IGNORECASE),
+    re.compile(r"\.zip\.001$", re.IGNORECASE),
+    re.compile(r"\.7z\.001$", re.IGNORECASE),
+]
+
+
+@dataclass
+class ScannedArchive:
+    """Represents a scanned archive file."""
+    path: Path
+    name: str  # Display name (from filename)
+    format: ArchiveFormat
+    size: int  # Total size in bytes (for multi-part, sum of all parts)
+    is_multipart: bool = False
+    parts: List[Path] = field(default_factory=list)
+    is_encrypted: bool = False
+    # For matching
+    detected_title: str = ""
+    detected_version: str = ""
+
+
+def scan_for_archives(
+    folder: Path,
+    recursive: bool = True,
+) -> List[ScannedArchive]:
+    """
+    Scan a folder for archive files.
+    Groups multi-part archives and returns only first parts.
+    """
+    archives: List[ScannedArchive] = []
+    seen_multipart_bases: Set[str] = set()
+
+    pattern = "**/*" if recursive else "*"
+
+    for item in folder.glob(pattern):
+        if not item.is_file():
+            continue
+
+        suffix = item.suffix.lower()
+        name_lower = item.name.lower()
+
+        # Skip non-first multipart files
+        is_later_part = False
+        for mp_pattern in MULTIPART_PATTERNS.values():
+            match = mp_pattern.search(item.name)
+            if match:
+                part_num = int(match.group(1))
+                if part_num > 1:
+                    is_later_part = True
+                    break
+
+        # Skip .rXX files (later parts)
+        if re.match(r".*\.r\d{2,}$", name_lower):
+            is_later_part = True
+
+        if is_later_part:
+            continue
+
+        # Check if it's an archive
+        fmt = detect_format(item)
+        if fmt == ArchiveFormat.UNKNOWN:
+            continue
+
+        # Detect multipart
+        is_multipart = False
+        parts: List[Path] = []
+        total_size = item.stat().st_size
+
+        for mp_pattern in MULTIPART_FIRST_PATTERNS:
+            if mp_pattern.search(item.name):
+                is_multipart = True
+                break
+
+        # Also check if next part exists (for .rar without .part pattern)
+        if suffix == ".rar" and not is_multipart:
+            r00_path = item.parent / (item.stem + ".r00")
+            if r00_path.exists():
+                is_multipart = True
+
+        if is_multipart:
+            parts = find_all_parts(item)
+            total_size = sum(p.stat().st_size for p in parts if p.exists())
+
+        # Extract title from filename
+        detected_title, detected_version = parse_archive_filename(item.name)
+
+        # Get encryption status
+        info = get_archive_info(item)
+
+        archive = ScannedArchive(
+            path=item,
+            name=item.name,
+            format=fmt,
+            size=total_size,
+            is_multipart=is_multipart,
+            parts=parts,
+            is_encrypted=info.is_encrypted,
+            detected_title=detected_title,
+            detected_version=detected_version,
+        )
+        archives.append(archive)
+
+    return sorted(archives, key=lambda a: a.detected_title.lower())
+
+
+def parse_archive_filename(filename: str) -> Tuple[str, str]:
+    """
+    Parse a game archive filename to extract title and version.
+
+    Common patterns:
+    - Game Name v0.1.2.zip
+    - Game Name [v0.1.2].rar
+    - Game-Name-0.1.2-pc.7z
+    - Game_Name_0.1.zip
+    """
+    # Remove extension
+    name = Path(filename).stem
+
+    # Remove multipart suffixes
+    name = re.sub(r"\.part\d+$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\.7z$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\.zip$", "", name, flags=re.IGNORECASE)
+
+    # Remove common suffixes
+    name = re.sub(r"[-_\s]*(pc|win|windows|linux|mac|android)[-_\s]*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"[-_\s]*(x64|x86|64bit|32bit)[-_\s]*$", "", name, flags=re.IGNORECASE)
+
+    # Try to find version pattern
+    version = ""
+    version_patterns = [
+        # [v0.1.2] or (v0.1.2)
+        re.compile(r"[\[\(]\s*v?(\d+(?:\.\d+)+[a-z]?)\s*[\]\)]", re.IGNORECASE),
+        # v0.1.2 or V0.1.2
+        re.compile(r"\s+v(\d+(?:\.\d+)+[a-z]?)", re.IGNORECASE),
+        # -0.1.2 or _0.1.2 at end
+        re.compile(r"[-_](\d+(?:\.\d+)+[a-z]?)$", re.IGNORECASE),
+    ]
+
+    for pattern in version_patterns:
+        match = pattern.search(name)
+        if match:
+            version = match.group(1)
+            # Remove version from name
+            name = pattern.sub("", name)
+            break
+
+    # Clean up title
+    title = name.strip()
+    title = re.sub(r"[-_]+$", "", title)  # Trailing separators
+    title = re.sub(r"[-_]+", " ", title)  # Replace separators with spaces
+    title = re.sub(r"\s+", " ", title)    # Multiple spaces
+    title = title.strip()
+
+    return title, version
+
+
+def normalize_title(title: str) -> str:
+    """Normalize a title for comparison."""
+    # Lowercase
+    t = title.lower()
+    # Remove punctuation and special chars
+    t = re.sub(r"[^\w\s]", "", t)
+    # Collapse whitespace
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def calculate_title_similarity(title1: str, title2: str) -> float:
+    """
+    Calculate similarity between two titles (0.0 - 1.0).
+    Uses normalized comparison.
+    """
+    n1 = normalize_title(title1)
+    n2 = normalize_title(title2)
+
+    if not n1 or not n2:
+        return 0.0
+
+    if n1 == n2:
+        return 1.0
+
+    # Check if one contains the other
+    if n1 in n2 or n2 in n1:
+        return 0.9
+
+    # Word overlap
+    words1 = set(n1.split())
+    words2 = set(n2.split())
+
+    if not words1 or not words2:
+        return 0.0
+
+    intersection = words1 & words2
+    union = words1 | words2
+
+    return len(intersection) / len(union) if union else 0.0

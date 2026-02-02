@@ -5,3 +5,4 @@ from .theme_editor import ThemeEditorDialog
 from .layout_customization import LayoutCustomizationDialog, LayoutConfig
 from .login_dialog import F95LoginDialog, ConnectionStatusWidget
 from .enhanced_bulk_import import EnhancedBulkImportDialog
+from .bulk_archive_import_dialog import BulkArchiveImportDialog
