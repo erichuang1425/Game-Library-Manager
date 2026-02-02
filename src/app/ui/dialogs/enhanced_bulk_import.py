@@ -10,8 +10,6 @@ Features:
 - Batch assignment with preview
 """
 
-import re
-from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -29,39 +27,17 @@ from app.services.f95_api import (
     derive_title_from_url, ThreadInfo
 )
 from app.services.update_checker import _fetch
+from app.services.title_matcher import calculate_similarity
 from app.logging_utils import get_logger, kv
 from app.ui.theme import current_theme
 
 _log = get_logger("enhanced_bulk_import")
 
 
-@lru_cache(maxsize=4096)
-def _normalize_title(txt: str) -> str:
-    """Normalize title for fuzzy matching."""
-    txt = txt.lower()
-    txt = re.sub(r"https?://", "", txt)
-    txt = re.sub(r"[/#?].*", "", txt)
-    txt = re.sub(r"[._-]+", " ", txt)
-    txt = re.sub(r"\b(v|build|season)\s*\d+[.\d]*", "", txt)
-    txt = re.sub(r"\b(alpha|beta|demo|redux|patreon)\b", "", txt)
-    txt = re.sub(r"\d+", "", txt)
-    txt = re.sub(r"\s+", " ", txt).strip()
-    return txt
-
-
-@lru_cache(maxsize=4096)
-def _tokens(name: str) -> frozenset:
-    return frozenset(t for t in _normalize_title(name).split(" ") if t)
-
-
+# Use shared title_matcher module for fuzzy matching
 def _score(a: str, b: str) -> float:
-    """Calculate Jaccard similarity between two titles."""
-    ta, tb = _tokens(a), _tokens(b)
-    if not ta or not tb:
-        return 0.0
-    inter = len(ta & tb)
-    union = len(ta | tb)
-    return inter / union
+    """Calculate similarity between two titles using shared utility."""
+    return calculate_similarity(a, b)
 
 
 class FetchWorker(QThread):
