@@ -72,6 +72,16 @@ class LibrarySidebar(QWidget):
         """Provide the current games list for collection counts."""
         self._games = games
 
+    def set_collections(self, collections: List[Collection], games=None) -> None:
+        """Update collections and optionally games, then refresh the sidebar."""
+        if games is not None:
+            self._games = games
+        self._collections = collections or []
+        # Refresh the sidebar with updated collections
+        key = self.current_key() or "all"
+        all_count = len(self._games) if self._games else 0
+        self.populate(all_count, 0, 0, self._collections, key)
+
     def populate(
         self,
         all_count: int,

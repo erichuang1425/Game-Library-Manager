@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.models import Game
 from app.models import Game, Collection
 from app.logging_utils import get_logger, kv
 from app.storage.paths import temp_data_dir
@@ -212,7 +211,6 @@ def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
     allowed_game = set(Game.__dataclass_fields__.keys())
     for obj in raw.get("games", []):
         obj["last_played"] = _str_to_dt(obj.get("last_played"))
-        obj["source_checked_at"] = _str_to_dt(obj.get("source_checked_at"))
         obj["source_checked_at"] = _str_to_dt(obj.get("source_checked_at"))
 
         # migrate older key names if needed

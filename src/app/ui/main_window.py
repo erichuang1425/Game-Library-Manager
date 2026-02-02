@@ -1503,10 +1503,11 @@ class MainWindow(QMainWindow):
         for game_id in game_ids:
             g = self._get_game(game_id)
             if g:
-                existing = [t.strip() for t in (g.tags or "").split(",") if t.strip()]
+                # g.tags is a List[str], not a comma-separated string
+                existing = list(g.tags) if g.tags else []
                 if tag not in existing:
                     existing.append(tag)
-                    g.tags = ", ".join(existing)
+                    g.tags = existing
                     changed += 1
         if changed:
             self._save_bundle()
