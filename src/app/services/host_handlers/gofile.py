@@ -15,6 +15,10 @@ import urllib.error
 
 from .base import HostHandler, ResolvedLink, DownloadResult, ProgressCallback, register_handler
 from app.logging_utils import get_logger
+from app.services.http_utils import (
+    create_request, handle_http_error,
+    DEFAULT_TIMEOUT, EXTENDED_TIMEOUT, CHUNK_SIZE,
+)
 
 _log = get_logger("gofile_handler")
 
@@ -59,9 +63,9 @@ class GofileHandler(HostHandler):
 
         try:
             url = f"{self.API_BASE}/createAccount"
-            req = urllib.request.Request(url, method="GET")
+            req = create_request(url)
 
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
                 data = json.loads(response.read().decode("utf-8"))
 
                 if data.get("status") == "ok":
@@ -100,15 +104,11 @@ class GofileHandler(HostHandler):
             )
 
         try:
-            # Get content info
+            # Get content info using shared http_utils
             info_url = f"{self.API_BASE}/getContent?contentId={content_id}&token={token}"
+            req = create_request(info_url)
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(info_url, headers=headers)
-
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as response:
                 data = json.loads(response.read().decode("utf-8"))
 
                 if data.get("status") != "ok":
@@ -145,9 +145,8 @@ class GofileHandler(HostHandler):
                 )
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return ResolvedLink(direct_url="", error="Content not found")
-            return ResolvedLink(direct_url="", error=f"HTTP error: {e.code}")
+            _, message = handle_http_error(e)
+            return ResolvedLink(direct_url="", error=message)
 
         except Exception as e:
             _log.warning("gofile_resolve_error %s", str(e))
@@ -172,14 +171,11 @@ class GofileHandler(HostHandler):
 
             destination.mkdir(parents=True, exist_ok=True)
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Cookie": f"accountToken={self._token}" if self._token else "",
-            }
+            # Create request with token cookie
+            extra_headers = {"Cookie": f"accountToken={self._token}"} if self._token else {}
+            req = create_request(resolved.direct_url, headers=extra_headers)
 
-            req = urllib.request.Request(resolved.direct_url, headers=headers)
-
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=EXTENDED_TIMEOUT) as response:
                 filename = resolved.filename or "gofile_download"
                 file_path = destination / filename
 
@@ -189,7 +185,7 @@ class GofileHandler(HostHandler):
 
                 with open(file_path, "wb") as f:
                     while True:
-                        chunk = response.read(8192)
+                        chunk = response.read(CHUNK_SIZE)
                         if not chunk:
                             break
                         f.write(chunk)
@@ -222,10 +218,7 @@ class GofileHandler(HostHandler):
 
         try:
             info_url = f"{self.API_BASE}/getContent?contentId={content_id}&token={token}"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(info_url, headers=headers)
+            req = create_request(info_url)
 
             with urllib.request.urlopen(req, timeout=15) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -239,9 +232,8 @@ class GofileHandler(HostHandler):
                     return False, f"Error: {status}"
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return False, "Content not found"
-            return False, f"HTTP error: {e.code}"
+            _, message = handle_http_error(e)
+            return False, message
 
         except Exception as e:
             return False, str(e)
