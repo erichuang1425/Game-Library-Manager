@@ -21,14 +21,15 @@ from app.logging_utils import connect_safe
 from app.ui.widgets import GameGrid, DetailsPanel, FilterChipsBar, build_filter_chips, show_success, show_error, BatchToolbar
 from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.dialogs import ScanWorker, UpdateWorker
-from app.ui.dialogs import PreferencesDialog
+from app.ui.dialogs import PreferencesDialog, ThemeEditorDialog, LayoutCustomizationDialog, LayoutConfig
 from app.ui.dialogs.bulk_source_import import BulkSourceImportDialog
 from app.services import (
     find_duplicate_shortcuts_in_root, move_duplicates_to_quarantine,
     launch_game, merge_scanned_into_library, apply_collection, parse_version, compare_versions,
     pixmap_for_path, pixmap_for_game,
     export_to_json, export_to_csv, export_to_markdown,
-    import_from_json, import_from_csv, merge_imported_games
+    import_from_json, import_from_csv, merge_imported_games,
+    get_undo_stack, create_field_change, create_multi_field_change, create_batch_change
 )
 from app.services.version_parser import CompareResult
 import os
@@ -164,12 +165,19 @@ class MainWindow(QMainWindow):
         act_scan.triggered.connect(self._open_scanner_project)
         act_settings = QAction("Settings", self)
         act_settings.triggered.connect(self._open_preferences)
+        act_theme_editor = QAction("Theme Editor…", self)
+        act_theme_editor.triggered.connect(self._open_theme_editor)
+        act_layout = QAction("Layout Customization…", self)
+        act_layout.triggered.connect(self._open_layout_customization)
         act_data = QAction("Open Data Folder", self)
         act_data.triggered.connect(self._open_data_folder)
         tools_menu.addAction(act_bulk)
         tools_menu.addAction(act_scan)
         tools_menu.addSeparator()
         tools_menu.addAction(act_settings)
+        tools_menu.addAction(act_theme_editor)
+        tools_menu.addAction(act_layout)
+        tools_menu.addSeparator()
         tools_menu.addAction(act_data)
         self.tools_btn = QToolButton()
         self.tools_btn.setText("Tools")
@@ -508,6 +516,19 @@ class MainWindow(QMainWindow):
 
         # Escape: Exit select mode or clear search
         QShortcut(QKeySequence("Escape"), self, self._on_escape_pressed)
+
+        # Undo: Ctrl+Z
+        QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_action)
+
+        # Redo: Ctrl+Shift+Z or Ctrl+Y
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._redo_action)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self._redo_action)
+
+        # Theme Editor: Ctrl+T
+        QShortcut(QKeySequence("Ctrl+T"), self, self._open_theme_editor)
+
+        # Layout Customization: Ctrl+L
+        QShortcut(QKeySequence("Ctrl+L"), self, self._open_layout_customization)
 
     def _focus_search(self) -> None:
         """Focus the search bar."""
@@ -1677,6 +1698,136 @@ class MainWindow(QMainWindow):
         )
         dlg.apply_clicked.connect(self._apply_settings_values)
         dlg.exec()
+
+    def _open_theme_editor(self) -> None:
+        """Open the theme editor dialog."""
+        dlg = ThemeEditorDialog(self, current_theme=self._theme)
+        dlg.theme_changed.connect(self._apply_custom_theme)
+        dlg.exec()
+
+    def _apply_custom_theme(self, theme_data: dict) -> None:
+        """Apply a custom theme from the theme editor."""
+        from app.ui.theme import ThemeSpec, _c
+
+        try:
+            colors = theme_data.get("colors", {})
+            tokens = theme_data.get("tokens", {})
+
+            # Build QColors from data
+            def make_color(d):
+                return _c(d.get("r", 128), d.get("g", 128), d.get("b", 128), d.get("a", 255))
+
+            # Create custom theme spec
+            custom_spec = ThemeSpec(
+                name=theme_data.get("name", "Custom"),
+                bg=make_color(colors.get("bg", {})),
+                surface=make_color(colors.get("surface", {})),
+                surface_alt=make_color(colors.get("surface_alt", {})),
+                card=make_color(colors.get("card", {})),
+                card_border=make_color(colors.get("card_border", {})),
+                card_hover=make_color(colors.get("card_hover", {})),
+                text=make_color(colors.get("text", {})),
+                text_muted=make_color(colors.get("text_muted", {})),
+                accent=make_color(colors.get("accent", {})),
+                accent_alt=make_color(colors.get("accent_alt", {})),
+                chip_bg=make_color(colors.get("chip_bg", {})),
+                chip_border=make_color(colors.get("chip_border", {})),
+                focus=make_color(colors.get("focus", {})),
+                outline=make_color(colors.get("outline", {})),
+                shadow=make_color(colors.get("shadow", {})),
+                **tokens
+            )
+
+            # Register custom theme temporarily
+            from app.ui.theme import THEMES
+            THEMES["custom"] = custom_spec
+            self._theme = "custom"
+            self._settings["theme"] = "custom"
+            self._settings["custom_theme"] = theme_data
+            self._persist_settings()
+
+            # Apply the theme
+            apply_theme(QApplication.instance(), "custom", self._font_family, self._font_scale)
+            self._safe_refresh_ui()
+            show_success(f"Applied theme: {theme_data.get('name', 'Custom')}")
+
+        except Exception as e:
+            self._log.exception("apply_custom_theme_failed")
+            show_error(f"Failed to apply theme: {e}")
+
+    def _open_layout_customization(self) -> None:
+        """Open the layout customization dialog."""
+        # Load current layout config
+        config_data = self._settings.get("layout_config", {})
+        config = LayoutConfig.from_dict(config_data) if config_data else LayoutConfig()
+
+        dlg = LayoutCustomizationDialog(self, config=config)
+        dlg.layout_changed.connect(self._apply_layout_config)
+        dlg.exec()
+
+    def _apply_layout_config(self, config: LayoutConfig) -> None:
+        """Apply layout configuration changes."""
+        try:
+            # Save config
+            self._settings["layout_config"] = config.to_dict()
+            self._persist_settings()
+
+            # Apply visibility changes
+            if hasattr(self, 'sidebar'):
+                self.sidebar.setVisible(config.show_sidebar)
+
+            if hasattr(self, '_details_widget'):
+                if not config.show_details_panel:
+                    self._details_widget.hide()
+                    self._details_visible = False
+                elif self._details_visible:
+                    self._details_widget.show()
+
+            if hasattr(self, 'filter_chips'):
+                self.filter_chips.setVisible(config.show_filter_chips)
+
+            # Apply status bar visibility
+            self.statusBar().setVisible(config.show_status_bar)
+
+            # Apply splitter sizes based on percentages
+            total_width = self.width()
+            sidebar_w = int(total_width * config.sidebar_width_pct / 100)
+            details_w = int(total_width * config.details_width_pct / 100) if config.show_details_panel else 0
+            grid_w = total_width - sidebar_w - details_w
+
+            if hasattr(self, '_splitter'):
+                self._splitter.setSizes([sidebar_w, grid_w, details_w])
+
+            self.grid.refresh()
+            show_success("Layout updated")
+
+        except Exception as e:
+            self._log.exception("apply_layout_config_failed")
+            show_error(f"Failed to apply layout: {e}")
+
+    def _undo_action(self) -> None:
+        """Undo the last action."""
+        undo_stack = get_undo_stack()
+        if undo_stack.can_undo():
+            cmd = undo_stack.undo()
+            if cmd:
+                show_success(f"Undone: {cmd.description}")
+                self._persist_library()
+                self._refresh_list()
+        else:
+            self.statusBar().showMessage("Nothing to undo", 2000)
+
+    def _redo_action(self) -> None:
+        """Redo the last undone action."""
+        undo_stack = get_undo_stack()
+        if undo_stack.can_redo():
+            cmd = undo_stack.redo()
+            if cmd:
+                show_success(f"Redone: {cmd.description}")
+                self._persist_library()
+                self._refresh_list()
+        else:
+            self.statusBar().showMessage("Nothing to redo", 2000)
 
     def _open_data_folder(self) -> None:
         from app.storage.paths import get_app_dir

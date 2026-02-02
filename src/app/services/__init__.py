@@ -12,3 +12,8 @@ from .export_import import (
     export_to_json, export_to_csv, export_to_markdown,
     import_from_json, import_from_csv, merge_imported_games
 )
+from .undo_redo import (
+    UndoStack, Command, GameFieldChangeCommand, GameMultiFieldChangeCommand,
+    BatchGameChangeCommand, AddGameCommand, RemoveGameCommand,
+    get_undo_stack, create_field_change, create_multi_field_change, create_batch_change
+)
