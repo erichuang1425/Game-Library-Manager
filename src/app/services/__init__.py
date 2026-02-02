@@ -17,3 +17,25 @@ from .undo_redo import (
     BatchGameChangeCommand, AddGameCommand, RemoveGameCommand,
     get_undo_stack, create_field_change, create_multi_field_change, create_batch_change
 )
+
+# F95zone advanced integration (Phase 6-10)
+from .f95_api import (
+    ThreadInfo, DownloadLink,
+    normalize_f95_url, is_f95_url, extract_thread_id,
+    parse_thread_title, extract_download_links, extract_thread_info,
+    derive_title_from_url, group_download_links_by_host
+)
+from .f95_auth import (
+    F95AuthManager, AuthResult, SessionInfo,
+    get_auth_manager
+)
+from .download_manager import (
+    DownloadManager, DownloadItem, DownloadStatus, DownloadProgress,
+    get_download_manager, format_size, format_speed, format_eta
+)
+from .archive_extractor import (
+    ArchiveFormat, ExtractionResult, ArchiveInfo,
+    detect_format, get_archive_info, extract_archive,
+    find_executables, find_save_folder,
+    add_custom_password, get_custom_passwords
+)
