@@ -1053,13 +1053,21 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ## Changelog
 
+### Version 1.2 (2026-02-02)
+- Migrated additional host handlers to use http_utils:
+  - `pixeldrain.py` - Uses create_request(), handle_http_error(), DEFAULT_TIMEOUT
+  - `gofile.py` - Uses create_request(), handle_http_error(), CHUNK_SIZE, EXTENDED_TIMEOUT
+  - `mediafire.py` - Uses create_request(), handle_http_error(), CHUNK_SIZE, EXTENDED_TIMEOUT
+- Total files migrated to shared utilities: 11
+- Net code reduction: ~50 lines while improving consistency
+
 ### Version 1.1 (2026-02-02)
 - Completed Sprint 1 (Critical Fixes) and Sprint 2 (Deduplication)
 - Created `http_utils.py` module (340 lines) - centralizes HTTP operations
 - Created `title_matcher.py` module (280 lines) - provides TitleIndex for O(n) matching
 - Created `base_worker.py` module (160 lines) - BaseWorker, CancellableWorker, ProgressWorker
 - Fixed P0 race conditions in download_manager.py and exception_hook.py
-- Migrated 4 files to use shared utilities
+- Migrated initial 4 files to use shared utilities
 - Updated services/__init__.py with new exports
 
 ### Version 1.0 (2026-02-02)
@@ -1070,5 +1078,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.1*
+*Document Version: 1.2*
 *Last Updated: 2026-02-02*
