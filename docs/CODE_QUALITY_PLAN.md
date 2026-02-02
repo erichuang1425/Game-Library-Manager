@@ -959,7 +959,11 @@ class TestDownloadManager:
 - [x] P0-001: Fix download manager race condition
 - [x] P0-002: Fix exception dialog race condition
 - [x] P1-001: Fix KeyError in main_window.py stats access
-- [ ] P1-002 through P1-005: Remaining high-priority bugs
+- [x] P1-002: Fix index out of bounds in f95_auth.py cookie parsing
+- [x] P1-003: Fix redundant condition in mega.py
+- [x] P1-004: Fix confusing double negation in smart_download.py
+- [x] P1-007: Fix None check for error messages in main_window.py
+- [x] P1-008: Fix dynamic import abuse in download_manager.py
 - [ ] Set up basic test infrastructure
 
 ### Sprint 2: Deduplication (Week 3-4) ✅ COMPLETED
@@ -1053,6 +1057,15 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ## Changelog
 
+### Version 1.3 (2026-02-02)
+- Completed remaining P1 bug fixes from Sprint 1:
+  - P1-003: Fixed redundant condition in mega.py (line 103)
+  - P1-004: Fixed confusing double negation in smart_download.py (line 314)
+  - P1-007: Fixed None check for error messages in main_window.py (line 1261)
+  - P1-008: Fixed dynamic import abuse in download_manager.py (line 170)
+- Sprint 1 now fully completed with all critical and high-priority bugs fixed
+- Ready to begin Sprint 3: Modularization
+
 ### Version 1.2 (2026-02-02)
 - Migrated additional host handlers to use http_utils:
   - `pixeldrain.py` - Uses create_request(), handle_http_error(), DEFAULT_TIMEOUT
@@ -1078,5 +1091,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.2*
+*Document Version: 1.3*
 *Last Updated: 2026-02-02*

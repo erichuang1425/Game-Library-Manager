@@ -311,7 +311,7 @@ class LinkValidator:
 
         try:
             parsed = urlparse(url)
-            if not parsed.scheme in ("http", "https"):
+            if parsed.scheme not in ("http", "https"):
                 return False, f"Invalid scheme: {parsed.scheme}"
             if not parsed.netloc:
                 return False, "Missing domain"

@@ -11,6 +11,7 @@ Provides:
 """
 
 import os
+import re
 import time
 import uuid
 import json
@@ -167,7 +168,7 @@ class DownloadWorker(QThread):
                 # Get filename from Content-Disposition if available
                 content_disp = response.headers.get("Content-Disposition", "")
                 if "filename=" in content_disp:
-                    match = __import__("re").search(r'filename[*]?=["\']?([^"\';\n]+)', content_disp)
+                    match = re.search(r'filename[*]?=["\']?([^"\';\n]+)', content_disp)
                     if match:
                         item.file_name = unquote(match.group(1).strip())
 

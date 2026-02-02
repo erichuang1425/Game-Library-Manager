@@ -100,7 +100,7 @@ class MegaHandler(HostHandler):
                 parts = parsed.fragment.split("!")
                 if len(parts) >= 2:
                     file_id = parts[0].lstrip("!")
-                    key = parts[1] if len(parts) > 1 else ""
+                    key = parts[1]
 
         except Exception as e:
             _log.warning("mega_url_parse_error %s", str(e))
