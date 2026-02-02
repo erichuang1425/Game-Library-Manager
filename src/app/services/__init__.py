@@ -18,6 +18,22 @@ from .undo_redo import (
     get_undo_stack, create_field_change, create_multi_field_change, create_batch_change
 )
 
+# Shared utilities (new)
+from .http_utils import (
+    USER_AGENT, USER_AGENT_SHORT,
+    CHUNK_SIZE, DEFAULT_TIMEOUT, EXTENDED_TIMEOUT,
+    create_request, fetch_url, fetch_url_text,
+    check_url_availability, download_file, download_with_retry,
+    handle_http_error, is_retriable_error,
+    format_size, format_speed, format_eta,
+)
+from .title_matcher import (
+    normalize_title as normalize_game_title,
+    tokenize, calculate_similarity,
+    find_best_match, batch_match,
+    TitleIndex, create_game_index,
+)
+
 # F95zone advanced integration (Phase 6-10)
 from .f95_api import (
     ThreadInfo, DownloadLink,

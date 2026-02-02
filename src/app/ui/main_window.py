@@ -642,7 +642,7 @@ class MainWindow(QMainWindow):
             self._apply_search()
             self.sidebar.set_collections(self._collections, self._all_games)
 
-            msg = f"Added: {stats['added']}, Updated: {stats['updated']}, Skipped: {stats['skipped']}"
+            msg = f"Added: {stats.get('added', 0)}, Updated: {stats.get('updated', 0)}, Skipped: {stats.get('skipped', 0)}"
             show_success(f"Import complete. {msg}")
             self.statusBar().showMessage(msg, 5000)
 

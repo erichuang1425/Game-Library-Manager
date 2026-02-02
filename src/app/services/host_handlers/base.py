@@ -11,6 +11,14 @@ from typing import Callable, Dict, List, Optional, Tuple, Type
 from urllib.parse import urlparse
 
 from app.logging_utils import get_logger
+from app.services.http_utils import (
+    USER_AGENT_SHORT,
+    CHUNK_SIZE,
+    EXTENDED_TIMEOUT,
+    create_request,
+    handle_http_error,
+    check_url_availability,
+)
 
 _log = get_logger("host_handlers")
 
@@ -131,23 +139,20 @@ class HostHandler(ABC):
             direct_url = resolved.direct_url
             filename = resolved.filename or "download"
 
-            # Prepare request
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(direct_url, headers=headers)
+            # Use shared http_utils for request creation
+            req = create_request(direct_url)
 
             destination.mkdir(parents=True, exist_ok=True)
             file_path = destination / filename
 
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=EXTENDED_TIMEOUT) as response:
                 total_size = int(response.headers.get("Content-Length", 0))
                 bytes_downloaded = 0
                 start_time = time.time()
 
                 with open(file_path, "wb") as f:
                     while True:
-                        chunk = response.read(8192)
+                        chunk = response.read(CHUNK_SIZE)
                         if not chunk:
                             break
                         f.write(chunk)
@@ -190,30 +195,11 @@ class HostHandler(ABC):
 
         Returns: (is_available, error_message)
         """
-        import urllib.request
-        import urllib.error
-
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
-            req = urllib.request.Request(url, method="HEAD", headers=headers)
-
-            with urllib.request.urlopen(req, timeout=15) as response:
-                return True, ""
-
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return False, "File not found (404)"
-            elif e.code == 403:
-                return False, "Access denied (403)"
-            elif e.code == 429:
-                return False, "Rate limited - please try again later"
-            return False, f"HTTP error: {e.code}"
-
-        except Exception as e:
-            self._last_error = str(e)
-            return False, str(e)
+        # Use shared http_utils for availability check
+        available, error = check_url_availability(url)
+        if not available:
+            self._last_error = error
+        return available, error
 
     def get_last_error(self) -> Optional[str]:
         """Get the last error message."""

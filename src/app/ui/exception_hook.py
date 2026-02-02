@@ -21,6 +21,7 @@ from app.logging_utils import get_logger, kv, RateLimiter
 
 _log = get_logger("crash")
 _dialog_rate = RateLimiter()
+_dialog_lock = threading.Lock()  # Thread-safe dialog flag protection
 _dialog_shown = False
 _notify_guard = threading.local()  # prevents re-entrancy
 
@@ -63,28 +64,40 @@ def _log_exception(exc_type, exc_value, exc_tb, origin: str, context: Optional[s
 def _show_dialog(origin: str) -> None:
     """
     Best-effort, non-blocking error notification to the user.
+    Thread-safe: uses lock to prevent multiple dialogs from concurrent exceptions.
     """
     global _dialog_shown
-    if _dialog_shown or not _dialog_rate.allow("fatal_dialog", interval_ms=2000):
-        return
+
+    # Thread-safe check-and-set with lock
+    with _dialog_lock:
+        if _dialog_shown or not _dialog_rate.allow("fatal_dialog", interval_ms=2000):
+            return
+        _dialog_shown = True
 
     app = QApplication.instance()
     if app is None:
+        # Reset flag if we can't show dialog
+        with _dialog_lock:
+            _dialog_shown = False
         return
 
     def _do():
         global _dialog_shown
-        if _dialog_shown:
-            return
-        _dialog_shown = True
+        # Double-check under lock (may have been reset by timeout)
+        with _dialog_lock:
+            if not _dialog_shown:
+                return
+
         box = QMessageBox(QMessageBox.Critical, "Fatal error", "A fatal error occurred. See manager.log.", QMessageBox.Ok)
         box.setWindowModality(Qt.NonModal)
         box.setAttribute(Qt.WA_DeleteOnClose)
         box.show()
+
         # Allow subsequent dialogs only after this one closes
         def _reset():
             global _dialog_shown
-            _dialog_shown = False
+            with _dialog_lock:
+                _dialog_shown = False
         box.finished.connect(_reset)
 
     QTimer.singleShot(0, _do)
