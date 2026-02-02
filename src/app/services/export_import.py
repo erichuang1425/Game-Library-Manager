@@ -61,11 +61,13 @@ def export_to_csv(games: List[Game], path: Path) -> int:
         writer.writeheader()
 
         for game in games:
+            # Convert tags list to comma-separated string for CSV
+            tags_str = ", ".join(game.tags) if game.tags else ""
             row = {
                 "title": game.title,
                 "status": game.status or "",
                 "rating": game.rating or "",
-                "tags": game.tags or "",
+                "tags": tags_str,
                 "notes": game.notes or "",
                 "shortcut_path": game.shortcut_path or "",
                 "shortcut_type": game.shortcut_type or "",
@@ -127,7 +129,8 @@ def export_to_markdown(games: List[Game], path: Path, include_stats: bool = True
 
         for g in sorted(by_status[status], key=lambda x: x.title.lower()):
             rating = f" ({'★' * (g.rating // 2 if g.rating else 0)})" if g.rating else ""
-            tags = f" `{g.tags}`" if g.tags else ""
+            tags_str = ", ".join(g.tags) if g.tags else ""
+            tags = f" `{tags_str}`" if tags_str else ""
             lines.append(f"- **{g.title}**{rating}{tags}")
 
         lines.append("")
@@ -178,17 +181,24 @@ def import_from_csv(path: Path) -> Tuple[List[Game], Dict[str, Any]]:
         reader = csv.DictReader(f)
 
         for row in reader:
+            # Parse tags: could be comma-separated string from CSV export
+            tags_raw = row.get("tags", "")
+            if isinstance(tags_raw, str) and tags_raw:
+                tags_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            else:
+                tags_list = []
+
             game = Game(
                 game_id=row.get("game_id") or _generate_id(),
                 title=row.get("title", "Unknown"),
-                shortcut_path=row.get("shortcut_path") or None,
-                shortcut_type=row.get("shortcut_type") or None,
+                shortcut_path=row.get("shortcut_path") or "",
+                shortcut_type=row.get("shortcut_type") or "",
                 status=row.get("status") or "backlog",
                 rating=int(row["rating"]) if row.get("rating") else None,
-                tags=row.get("tags") or None,
-                notes=row.get("notes") or None,
-                source_url=row.get("source_url") or None,
-                installed_version_raw=row.get("installed_version") or None,
+                tags=tags_list,
+                notes=row.get("notes") or "",
+                source_url=row.get("source_url") or "",
+                installed_version_raw=row.get("installed_version") or "",
                 launch_count=int(row["launch_count"]) if row.get("launch_count") else 0,
                 confidence=row.get("confidence") or "medium",
                 last_played=_parse_datetime(row.get("last_played")),
@@ -281,20 +291,22 @@ def _dict_to_game(d: Dict[str, Any]) -> Game:
 def _collection_to_dict(coll: Collection) -> Dict[str, Any]:
     """Convert Collection to serializable dict."""
     return {
+        "collection_id": coll.collection_id,
         "name": coll.name,
         "type": coll.type,
         "game_ids": list(coll.game_ids) if coll.game_ids else [],
-        "filter_rules": coll.filter_rules,
+        "filter": coll.filter if coll.filter else {},
     }
 
 
 def _dict_to_collection(d: Dict[str, Any]) -> Collection:
     """Convert dict to Collection object."""
     return Collection(
+        collection_id=d.get("collection_id") or _generate_id(),
         name=d.get("name", "Unnamed"),
         type=d.get("type", "manual"),
         game_ids=d.get("game_ids", []),
-        filter_rules=d.get("filter_rules"),
+        filter=d.get("filter", {}),
     )
 
 
