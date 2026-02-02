@@ -101,6 +101,10 @@ class MainWindow(QMainWindow):
         self._selected_game_id: Optional[str] = None
         self._ignored_health: dict[str, set[str]] = {}
 
+        # Restore custom theme if saved
+        if self._theme == "custom" and "custom_theme" in self._settings:
+            self._restore_custom_theme()
+
         # apply theme + font early so widgets pick them up
         apply_theme(QApplication.instance(), self._theme, self._font_family, self._font_scale)
 
@@ -1704,6 +1708,46 @@ class MainWindow(QMainWindow):
         dlg = ThemeEditorDialog(self, current_theme=self._theme)
         dlg.theme_changed.connect(self._apply_custom_theme)
         dlg.exec()
+
+    def _restore_custom_theme(self) -> None:
+        """Restore a custom theme from saved settings on startup."""
+        from app.ui.theme import ThemeSpec, _c, THEMES
+
+        theme_data = self._settings.get("custom_theme", {})
+        if not theme_data:
+            return
+
+        try:
+            colors = theme_data.get("colors", {})
+            tokens = theme_data.get("tokens", {})
+
+            def make_color(d):
+                return _c(d.get("r", 128), d.get("g", 128), d.get("b", 128), d.get("a", 255))
+
+            custom_spec = ThemeSpec(
+                name=theme_data.get("name", "Custom"),
+                bg=make_color(colors.get("bg", {})),
+                surface=make_color(colors.get("surface", {})),
+                surface_alt=make_color(colors.get("surface_alt", {})),
+                card=make_color(colors.get("card", {})),
+                card_border=make_color(colors.get("card_border", {})),
+                card_hover=make_color(colors.get("card_hover", {})),
+                text=make_color(colors.get("text", {})),
+                text_muted=make_color(colors.get("text_muted", {})),
+                accent=make_color(colors.get("accent", {})),
+                accent_alt=make_color(colors.get("accent_alt", {})),
+                chip_bg=make_color(colors.get("chip_bg", {})),
+                chip_border=make_color(colors.get("chip_border", {})),
+                focus=make_color(colors.get("focus", {})),
+                outline=make_color(colors.get("outline", {})),
+                shadow=make_color(colors.get("shadow", {})),
+                **tokens
+            )
+            THEMES["custom"] = custom_spec
+        except Exception:
+            # Fall back to dark theme if custom theme restoration fails
+            self._theme = "dark"
+            self._log.exception("restore_custom_theme_failed")
 
     def _apply_custom_theme(self, theme_data: dict) -> None:
         """Apply a custom theme from the theme editor."""
