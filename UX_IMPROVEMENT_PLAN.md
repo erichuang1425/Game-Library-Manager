@@ -297,11 +297,12 @@ This plan outlines strategic UX improvements for the Game Library Manager applic
 - [x] Reduced motion setting (is_reduced_motion() check)
 - [x] Focus management audit (keyboard navigation in Phase 1)
 
-### Phase 5: Power Features (Weeks 8-10)
-- [ ] Undo/redo system
-- [ ] Import/export functionality
-- [ ] Theme editor
-- [ ] Layout customization
+### Phase 5: Power Features (Weeks 8-10) - COMPLETED
+- [x] Import/export functionality (JSON, CSV, Markdown export; JSON/CSV import with merge strategies)
+- [x] Keyboard shortcuts for common actions (Ctrl+F, Ctrl+E, Ctrl+I, Ctrl+D, Escape, etc.)
+- [ ] Undo/redo system (deferred to future)
+- [ ] Theme editor (deferred to future)
+- [ ] Layout customization (deferred to future)
 
 ---
 
