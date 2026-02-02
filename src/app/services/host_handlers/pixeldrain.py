@@ -27,13 +27,26 @@ class PixeldrainHandler(HostHandler):
     Pixeldrain has a simple API:
     - File info: https://pixeldrain.com/api/file/{id}/info
     - Download: https://pixeldrain.com/api/file/{id}
+
+    Note: Pixeldrain has daily bandwidth limits for free users (~6GB/day).
     """
 
     SUPPORTED_DOMAINS = ["pixeldrain.com"]
     DISPLAY_NAME = "Pixeldrain"
     REQUIRES_AUTH = False
+    PRIORITY = 3  # Good but has limits
+    HAS_DAILY_LIMIT = True
+    DAILY_LIMIT_GB = 6.0
 
     API_BASE = "https://pixeldrain.com/api"
+
+    # Error patterns indicating bandwidth limit
+    LIMIT_ERROR_PATTERNS = [
+        "bandwidth limit",
+        "download limit",
+        "rate limit",
+        "too many requests",
+    ]
 
     def _extract_file_id(self, url: str) -> Optional[str]:
         """Extract file ID from Pixeldrain URL."""
@@ -98,3 +111,41 @@ class PixeldrainHandler(HostHandler):
                 direct_url=f"{self.API_BASE}/file/{file_id}",
                 filename=f"pixeldrain_{file_id}",
             )
+
+    def check_availability(self, url: str) -> tuple[bool, str]:
+        """Check if file is available on Pixeldrain."""
+        file_id = self._extract_file_id(url)
+        if not file_id:
+            return False, "Invalid Pixeldrain URL"
+
+        try:
+            info_url = f"{self.API_BASE}/file/{file_id}/info"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            }
+            req = urllib.request.Request(info_url, headers=headers)
+
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                if data.get("success") is False:
+                    return False, data.get("message", "Unknown error")
+                return True, ""
+
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return False, "File not found"
+            elif e.code == 429:
+                return False, "Rate limited - daily bandwidth limit may be reached"
+            # Try to read error message
+            try:
+                error_data = json.loads(e.read().decode("utf-8"))
+                error_msg = error_data.get("message", f"HTTP error: {e.code}")
+                # Check for limit errors
+                if any(p in error_msg.lower() for p in self.LIMIT_ERROR_PATTERNS):
+                    return False, f"Daily limit reached: {error_msg}"
+                return False, error_msg
+            except Exception:
+                return False, f"HTTP error: {e.code}"
+
+        except Exception as e:
+            return False, str(e)

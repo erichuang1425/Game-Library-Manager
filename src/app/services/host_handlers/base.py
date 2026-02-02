@@ -61,8 +61,19 @@ class HostHandler(ABC):
     # Whether this host requires authentication
     REQUIRES_AUTH: bool = False
 
+    # Priority ranking (lower = higher priority, try first)
+    # Default priorities: buzzheavier=1, gofile=2, pixeldrain=3, mega=4, etc.
+    PRIORITY: int = 50
+
+    # Whether this host has daily download limits
+    HAS_DAILY_LIMIT: bool = False
+
+    # Daily limit in GB (if HAS_DAILY_LIMIT is True)
+    DAILY_LIMIT_GB: float = 0.0
+
     def __init__(self) -> None:
         self._authenticated = False
+        self._last_error: Optional[str] = None
 
     @classmethod
     def can_handle(cls, url: str) -> bool:
@@ -172,6 +183,46 @@ class HostHandler(ABC):
     def is_authenticated(self) -> bool:
         """Check if currently authenticated."""
         return self._authenticated or not self.REQUIRES_AUTH
+
+    def check_availability(self, url: str) -> Tuple[bool, str]:
+        """
+        Check if a file is available without downloading it.
+
+        Returns: (is_available, error_message)
+        """
+        import urllib.request
+        import urllib.error
+
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            }
+            req = urllib.request.Request(url, method="HEAD", headers=headers)
+
+            with urllib.request.urlopen(req, timeout=15) as response:
+                return True, ""
+
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return False, "File not found (404)"
+            elif e.code == 403:
+                return False, "Access denied (403)"
+            elif e.code == 429:
+                return False, "Rate limited - please try again later"
+            return False, f"HTTP error: {e.code}"
+
+        except Exception as e:
+            self._last_error = str(e)
+            return False, str(e)
+
+    def get_last_error(self) -> Optional[str]:
+        """Get the last error message."""
+        return self._last_error
+
+    @classmethod
+    def get_priority(cls) -> int:
+        """Get host priority (lower = higher priority)."""
+        return cls.PRIORITY
 
 
 # Registry of handlers
