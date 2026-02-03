@@ -150,15 +150,17 @@ def show_exception_dialog(...):
 
 ---
 
-### P1-001: Missing Error Handling in Library Save
+### P1-001: Missing Error Handling in Library Save ✅ FIXED
 
-**File:** `src/app/storage/json_store.py:193`
+**File:** `src/app/storage/json_store.py:177-204`
 **Severity:** P1 - High
 **Type:** Missing Error Handling
 
-**Problem:** `save_library_bundle()` lacks try/except unlike `save_library()`.
+**Problem:** `save_library_bundle()` lacked try/except unlike `save_library()`.
 
-**Solution:** Apply same fallback pattern used in `save_library()` (lines 82-92).
+**Solution:** Applied same fallback pattern used in `save_library()` (lines 82-92).
+
+**Fix Applied (v1.9):** Added try/except with temp directory fallback, logging, and user warning dialog.
 
 ---
 
@@ -1039,7 +1041,7 @@ class TestDownloadManager:
 - [x] PERF-001: Implement fuzzy matching index (TitleIndex class in title_matcher.py)
 - [x] PERF-002: Add search haystack caching (SearchCache class in filter_utils.py)
 - [ ] PERF-003: Implement virtual scrolling
-- [ ] PERF-004: Add cache bounds
+- [x] PERF-004: Add cache bounds (BoundedCache class in http_utils.py, applied to update_checker.py)
 
 ### Sprint 6: Architecture (Week 11-12)
 
@@ -1059,7 +1061,7 @@ class TestDownloadManager:
 | `main_window.py` | 2,364 | HIGH | Split into 10 modules | ✅ DONE - Now `main_window/` package |
 | `game_grid.py` | 1,187 | HIGH | Split into 4 modules | ✅ DONE - Now `game_grid/` package |
 | `archive_extractor.py` | 853 | MEDIUM | Split by format | ✅ DONE - Now `archive/` package |
-| `bulk_archive_import_dialog.py` | 751 | MEDIUM | Extract logic | Pending |
+| `bulk_archive_import_dialog.py` | 626 | MEDIUM | Extract workers + password UI | ✅ DONE - Extracted to workers.py and password_manager.py |
 | `f95_api.py` | 703 | MEDIUM | Extract parsers | Pending |
 | `download_manager.py` | 679 | MEDIUM | Split components | ✅ DONE - Now `download/` package |
 | `f95_auth.py` | 678 | MEDIUM | Extract storage | Pending |
@@ -1101,6 +1103,32 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 ---
 
 ## Changelog
+
+### Version 2.0 (2026-02-03)
+- **PERF-004: Implemented Bounded Cache** in http_utils.py
+  - Created `BoundedCache[K, V]` generic class with LRU eviction and TTL support
+  - Migrated update_checker.py to use bounded caches:
+    - `_html_cache` now limited to 200 entries with 6-hour TTL
+    - `_parsed_cache` now limited to 500 entries with 6-hour TTL
+  - Exported `BoundedCache` from services/__init__.py for reuse
+- **Split bulk_archive_import_dialog.py** (751 → 626 lines, 17% reduction)
+  - Extracted `bulk_archive_workers.py` (~70 lines) - ScanWorker, ImportWorker
+  - Extracted `PasswordManagerWidget` (~130 lines) to ui/widgets/password_manager.py
+  - Reusable password management widget for other dialogs
+- **Sprint 5 Progress:**
+  - PERF-001: ✅ Complete (TitleIndex)
+  - PERF-002: ✅ Complete (SearchCache)
+  - PERF-003: ⏳ Pending (Virtual scrolling)
+  - PERF-004: ✅ Complete (BoundedCache)
+
+### Version 1.9 (2026-02-03)
+- **Bug Fixes:**
+  - P1-001: Added error handling with fallback to `save_library_bundle()` in json_store.py:177-204
+  - P1-010: Added initial progress emission in http_utils.py:279-281 for fast downloads
+- **Documentation:**
+  - Created AGENT.md for context preservation and reduced exploration time
+- Sprint 1 P1-001 (save_library_bundle error handling) now fully fixed
+- Updated all issue tracking to reflect current state
 
 ### Version 1.8 (2026-02-03)
 - Completed Sprint 4: Modularization Part 2
@@ -1210,5 +1238,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.8*
+*Document Version: 2.0*
 *Last Updated: 2026-02-03*

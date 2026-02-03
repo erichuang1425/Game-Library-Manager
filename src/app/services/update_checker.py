@@ -10,27 +10,32 @@ from hashlib import md5
 from app.models import Game
 from app.services.version_parser import parse_version, compare_versions, CompareResult, VersionInfo
 from app.services.f95_parser import extract_f95_version
-from app.services.http_utils import USER_AGENT, create_request, DEFAULT_TIMEOUT
+from app.services.http_utils import USER_AGENT, create_request, DEFAULT_TIMEOUT, BoundedCache
 from app.logging_utils import get_logger
 from app.logging_utils import kv, RateLimiter, timed
 
 _log = get_logger("update_checker")
 _rate = RateLimiter()
 
-# Simple in-memory cache for fetched pages this session
-_html_cache: Dict[str, str] = {}
-_html_cache_ts: Dict[str, float] = {}
-# cache parsed versions keyed by (url, content_hash)
-_parsed_cache: Dict[Tuple[str, str], Tuple[str, str, str]] = {}
+# PERF-004: Bounded caches to prevent memory growth
 _CACHE_TTL = 60 * 60 * 6  # 6 hours
+_MAX_HTML_CACHE = 200  # Max cached HTML pages
+_MAX_PARSED_CACHE = 500  # Max cached parsed results
+
+# Bounded cache for fetched HTML pages (key: url, value: html_text)
+_html_cache: BoundedCache[str, str] = BoundedCache(max_size=_MAX_HTML_CACHE, ttl=_CACHE_TTL)
+
+# Bounded cache for parsed versions (key: (url, content_hash), value: (raw, num_str, suffix))
+_parsed_cache: BoundedCache[Tuple[str, str], Tuple[str, str, str]] = BoundedCache(max_size=_MAX_PARSED_CACHE, ttl=_CACHE_TTL)
 
 
 def _fetch(url: str) -> str:
-    now = time.time()
-    if url in _html_cache and now - _html_cache_ts.get(url, 0) < _CACHE_TTL:
+    # Check bounded cache (handles TTL internally)
+    cached = _html_cache.get(url)
+    if cached is not None:
         if _rate.allow("fetch_cache_hit", 1000):
             _log.debug("fetch_cache_hit %s", kv(url=url))
-        return _html_cache[url]
+        return cached
 
     last_err = None
     for attempt in range(3):
@@ -39,8 +44,7 @@ def _fetch(url: str) -> str:
             req = create_request(url)
             with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
                 text = resp.read().decode("utf-8", errors="ignore")
-                _html_cache[url] = text
-                _html_cache_ts[url] = time.time()
+                _html_cache.set(url, text)
                 _log.info("fetch_ok %s", kv(url=url, status=resp.status, len=len(text), attempt=attempt+1))
                 return text
         except Exception as e:
@@ -86,10 +90,13 @@ def fetch_source_version(url: str) -> Tuple[str, Optional[str], str]:
     html_text = _fetch(url)
     h = md5(html_text.encode("utf-8", errors="ignore")).hexdigest()
     cache_key = (url, h)
-    if cache_key in _parsed_cache:
+
+    # Check bounded parsed cache
+    cached = _parsed_cache.get(cache_key)
+    if cached is not None:
         if _rate.allow("parse_cache_hit", 1000):
             _log.debug("parse_cache_hit %s", kv(url=url))
-        return _parsed_cache[cache_key]
+        return cached
 
     # f95 special handling
     if "f95zone" in url:
@@ -97,12 +104,12 @@ def fetch_source_version(url: str) -> Tuple[str, Optional[str], str]:
         if raw:
             vi = parse_version(raw)
             result = (raw, vi.numeric_str, vi.suffix_letter or "")
-            _parsed_cache[cache_key] = result
+            _parsed_cache.set(cache_key, result)
             return result
         _log.info("f95 parser returned none; method=%s", method)
 
     result = parse_source_version(html_text)
-    _parsed_cache[cache_key] = result
+    _parsed_cache.set(cache_key, result)
     if _rate.allow("parse_done", 800):
         _log.info("parse_done %s", kv(url=url, raw=result[0][:50], num=result[1], suf=result[2]))
     return result

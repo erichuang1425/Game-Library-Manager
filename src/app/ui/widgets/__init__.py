@@ -14,3 +14,4 @@ from .search_bar import (
     EnhancedSearchBar, SearchParser, ParsedSearch, RecentSearches
 )
 from .downloads_panel import DownloadsPanel, DownloadItemWidget
+from .password_manager import PasswordManagerWidget

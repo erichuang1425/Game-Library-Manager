@@ -13,73 +13,25 @@ Provides a comprehensive UI for:
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, Signal, QThread, QObject
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QComboBox,
-    QGroupBox, QFileDialog, QProgressBar, QTextEdit, QSplitter, QFrame,
-    QWidget, QListWidget, QListWidgetItem, QMessageBox, QTabWidget,
-    QSpinBox, QAbstractItemView
+    QGroupBox, QFileDialog, QProgressBar, QTextEdit,
+    QWidget, QMessageBox, QTabWidget, QAbstractItemView
 )
 
-from app.logging_utils import get_logger, kv
+from app.logging_utils import get_logger
 from app.models import Game
 from app.services import (
     BulkArchiveImporter, ImportItem, ImportResult, ImportAction, ImportStatus,
-    get_custom_passwords, set_custom_passwords, add_custom_password,
-    remove_custom_password, load_custom_passwords, format_size
+    load_custom_passwords, format_size
 )
+from app.ui.widgets.password_manager import PasswordManagerWidget
+from .bulk_archive_workers import ScanWorker, ImportWorker
 
 _log = get_logger("ui.bulk_archive_import")
-
-
-class ScanWorker(QObject):
-    """Worker for scanning archives in background."""
-    finished = Signal(list)  # List[ImportItem]
-    error = Signal(str)
-    progress = Signal(str)
-
-    def __init__(self, importer: BulkArchiveImporter, source_folder: Path, recursive: bool):
-        super().__init__()
-        self.importer = importer
-        self.source_folder = source_folder
-        self.recursive = recursive
-
-    def run(self):
-        try:
-            self.progress.emit(f"Scanning {self.source_folder}...")
-            items = self.importer.scan_folder(self.source_folder, self.recursive)
-            self.finished.emit(items)
-        except Exception as e:
-            self.error.emit(str(e))
-
-
-class ImportWorker(QObject):
-    """Worker for importing archives in background."""
-    finished = Signal(object)  # ImportResult
-    error = Signal(str)
-    progress = Signal(str, int, int, str)  # stage, current, total, message
-
-    def __init__(self, importer: BulkArchiveImporter, items: List[ImportItem], delete_archives: bool):
-        super().__init__()
-        self.importer = importer
-        self.items = items
-        self.delete_archives = delete_archives
-
-    def run(self):
-        try:
-            result = self.importer.execute_import(
-                self.items,
-                progress=self._on_progress,
-                delete_archives=self.delete_archives,
-            )
-            self.finished.emit(result)
-        except Exception as e:
-            self.error.emit(str(e))
-
-    def _on_progress(self, stage: str, current: int, total: int, message: str):
-        self.progress.emit(stage, current, total, message)
 
 
 class BulkArchiveImportDialog(QDialog):
@@ -248,60 +200,9 @@ class BulkArchiveImportDialog(QDialog):
         return widget
 
     def _build_passwords_tab(self) -> QWidget:
-        """Build the password management tab."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Common passwords info
-        info = QLabel(
-            "Common F95zone passwords are automatically tried.\n"
-            "Add your own custom passwords below for encrypted archives."
-        )
-        info.setWordWrap(True)
-        layout.addWidget(info)
-
-        # Password list
-        pwd_group = QGroupBox("Custom Passwords")
-        pwd_layout = QVBoxLayout(pwd_group)
-
-        self.passwords_list = QListWidget()
-        self._refresh_passwords_list()
-        pwd_layout.addWidget(self.passwords_list, 1)
-
-        # Add password
-        add_row = QHBoxLayout()
-        self.new_password_edit = QLineEdit()
-        self.new_password_edit.setPlaceholderText("Enter new password...")
-        self.new_password_edit.setEchoMode(QLineEdit.Password)
-        add_row.addWidget(self.new_password_edit, 1)
-
-        self.show_password_check = QCheckBox("Show")
-        self.show_password_check.toggled.connect(self._toggle_password_visibility)
-        add_row.addWidget(self.show_password_check)
-
-        self.add_password_btn = QPushButton("Add")
-        self.add_password_btn.clicked.connect(self._add_password)
-        add_row.addWidget(self.add_password_btn)
-
-        self.remove_password_btn = QPushButton("Remove Selected")
-        self.remove_password_btn.clicked.connect(self._remove_password)
-        add_row.addWidget(self.remove_password_btn)
-
-        pwd_layout.addLayout(add_row)
-
-        layout.addWidget(pwd_group, 1)
-
-        # Common passwords reference
-        common_group = QGroupBox("Built-in Passwords (read-only)")
-        common_layout = QVBoxLayout(common_group)
-        common_list = QTextEdit()
-        common_list.setReadOnly(True)
-        common_list.setPlainText("f95zone\nf95\nwww.f95zone.to\nf95zone.to\nwww.f95zone.com\nf95zone.com\n(empty)")
-        common_list.setMaximumHeight(120)
-        common_layout.addWidget(common_list)
-        layout.addWidget(common_group)
-
-        return widget
+        """Build the password management tab using reusable widget."""
+        self.password_manager = PasswordManagerWidget()
+        return self.password_manager
 
     def _build_import_tab(self) -> QWidget:
         """Build the import tab."""
@@ -615,32 +516,6 @@ class BulkArchiveImportDialog(QDialog):
         """Handle tab change."""
         if index == 2:  # Import tab
             self._update_summary()
-
-    def _refresh_passwords_list(self):
-        """Refresh the passwords list widget."""
-        self.passwords_list.clear()
-        for pwd in get_custom_passwords():
-            self.passwords_list.addItem("*" * len(pwd))
-
-    def _toggle_password_visibility(self, show: bool):
-        self.new_password_edit.setEchoMode(
-            QLineEdit.Normal if show else QLineEdit.Password
-        )
-
-    def _add_password(self):
-        pwd = self.new_password_edit.text()
-        if pwd:
-            add_custom_password(pwd)
-            self._refresh_passwords_list()
-            self.new_password_edit.clear()
-
-    def _remove_password(self):
-        row = self.passwords_list.currentRow()
-        if row >= 0:
-            passwords = get_custom_passwords()
-            if row < len(passwords):
-                remove_custom_password(passwords[row])
-                self._refresh_passwords_list()
 
     def _start_import(self):
         """Start the import process."""

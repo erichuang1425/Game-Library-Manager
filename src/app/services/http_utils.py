@@ -10,12 +10,87 @@ from __future__ import annotations
 import time
 import urllib.request
 import urllib.error
+from collections import OrderedDict
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar
 
 from app.logging_utils import get_logger
 
 _log = get_logger("http_utils")
+
+# ============================================================================
+# Bounded Cache (PERF-004)
+# ============================================================================
+
+K = TypeVar('K')
+V = TypeVar('V')
+
+
+class BoundedCache(Generic[K, V]):
+    """
+    LRU cache with maximum size and optional TTL.
+
+    PERF-004: Prevents unbounded memory growth in caches.
+
+    Args:
+        max_size: Maximum number of entries (default: 100)
+        ttl: Time-to-live in seconds (default: None = no expiry)
+    """
+
+    def __init__(self, max_size: int = 100, ttl: Optional[float] = None):
+        self._cache: OrderedDict[K, Tuple[V, float]] = OrderedDict()
+        self._max_size = max_size
+        self._ttl = ttl
+
+    def get(self, key: K) -> Optional[V]:
+        """Get value if present and not expired. Moves to end (LRU)."""
+        if key not in self._cache:
+            return None
+
+        value, timestamp = self._cache[key]
+
+        # Check TTL
+        if self._ttl is not None and time.time() - timestamp > self._ttl:
+            del self._cache[key]
+            return None
+
+        # Move to end (most recently used)
+        self._cache.move_to_end(key)
+        return value
+
+    def set(self, key: K, value: V) -> None:
+        """Set value, evicting oldest if at capacity."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            # Evict oldest if at capacity
+            while len(self._cache) >= self._max_size:
+                self._cache.popitem(last=False)
+
+        self._cache[key] = (value, time.time())
+
+    def contains(self, key: K) -> bool:
+        """Check if key exists and is not expired."""
+        return self.get(key) is not None
+
+    def remove(self, key: K) -> bool:
+        """Remove key if present. Returns True if removed."""
+        if key in self._cache:
+            del self._cache[key]
+            return True
+        return False
+
+    def clear(self) -> None:
+        """Clear all entries."""
+        self._cache.clear()
+
+    def __len__(self) -> int:
+        """Return number of entries (including possibly expired)."""
+        return len(self._cache)
+
+    def __contains__(self, key: K) -> bool:
+        """Check if key exists (for 'in' operator)."""
+        return self.contains(key)
 
 
 # ============================================================================
@@ -276,6 +351,10 @@ def download_file(
             # Download with progress
             bytes_downloaded = 0
             start_time = time.time()
+
+            # Emit initial progress (P1-010 fix: ensures progress shows for fast downloads)
+            if progress_callback:
+                progress_callback(0, total_size, 0.0)
 
             with open(file_path, "wb") as f:
                 while True:
