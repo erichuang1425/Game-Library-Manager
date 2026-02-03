@@ -175,6 +175,7 @@ def load_collections(path: Path) -> List[Collection]:
     raise NotImplementedError("Use load_library_bundle instead")
 
 def save_library_bundle(path: Path, games: List[Game], collections: List[Collection]) -> None:
+    start = time.perf_counter()
     data: Dict[str, Any] = {
         "version": 2,
         "games": [],
@@ -190,7 +191,18 @@ def save_library_bundle(path: Path, games: List[Game], collections: List[Collect
     for c in collections:
         data["collections"].append(asdict(c))
 
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _log.info("save_library_bundle_done %s", kv(path=path, games=len(games), collections=len(collections),
+                                                    bytes=path.stat().st_size if path.exists() else 0,
+                                                    duration_ms=round((time.perf_counter()-start)*1000,1), fallback_used=False))
+    except Exception as e:
+        fb_dir = temp_data_dir()
+        fb_dir.mkdir(parents=True, exist_ok=True)
+        fb_path = fb_dir / path.name
+        fb_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _log.error("save_library_bundle_fallback %s", kv(path=path, fallback=str(fb_path), err=e))
+        _warn_fallback(fb_path)
 
 
 def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:

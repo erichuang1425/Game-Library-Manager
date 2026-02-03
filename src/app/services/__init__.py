@@ -22,6 +22,7 @@ from .undo_redo import (
 from .http_utils import (
     USER_AGENT, USER_AGENT_SHORT,
     CHUNK_SIZE, DEFAULT_TIMEOUT, EXTENDED_TIMEOUT,
+    BoundedCache,  # PERF-004: LRU cache with size bounds
     create_request, fetch_url, fetch_url_text,
     check_url_availability, download_file, download_with_retry,
     handle_http_error, is_retriable_error,
