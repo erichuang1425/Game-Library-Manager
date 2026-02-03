@@ -45,11 +45,12 @@ from .f95_auth import (
     F95AuthManager, AuthResult, SessionInfo,
     get_auth_manager
 )
-from .download_manager import (
+from .download import (
     DownloadManager, DownloadItem, DownloadStatus, DownloadProgress,
+    DownloadHistory, DownloadWorker,
     get_download_manager, format_size, format_speed, format_eta
 )
-from .archive_extractor import (
+from .archive import (
     ArchiveFormat, ExtractionResult, ArchiveInfo, ScannedArchive,
     detect_format, get_archive_info, extract_archive,
     find_executables, find_save_folder,
