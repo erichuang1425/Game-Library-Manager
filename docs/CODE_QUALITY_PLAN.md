@@ -1000,7 +1000,7 @@ class TestDownloadManager:
 ### Sprint 5: Performance (Week 9-10)
 
 - [x] PERF-001: Implement fuzzy matching index (TitleIndex class in title_matcher.py)
-- [ ] PERF-002: Add search haystack caching
+- [x] PERF-002: Add search haystack caching (SearchCache class in filter_utils.py)
 - [ ] PERF-003: Implement virtual scrolling
 - [ ] PERF-004: Add cache bounds
 
@@ -1065,6 +1065,15 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ## Changelog
 
+### Version 1.6 (2026-02-03)
+- Implemented PERF-002: Search haystack caching
+  - Added `SearchCache` class to `filter_utils.py` (~130 lines)
+  - Pre-computes and caches search haystacks per game
+  - Supports cache invalidation for modified games
+  - Max size limit to prevent memory issues
+  - Global `get_search_cache()` accessor
+- Exported `SearchCache` and `get_search_cache` from services module
+
 ### Version 1.5 (2026-02-03)
 - Completed MOD-002: Split `game_grid.py` (1,187 lines) into focused modules:
   - `game_grid/display_utils.py` (~70 lines) - status_label, confidence_icon, stars, relative_time
@@ -1125,5 +1134,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.5*
+*Document Version: 1.6*
 *Last Updated: 2026-02-03*

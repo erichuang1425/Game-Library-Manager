@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Dict, List, Optional, Set
 
 from app.models import Game
 from app.services.version_parser import parse_version, compare_versions, CompareResult
@@ -26,6 +26,137 @@ class FilterConfig:
     tag_filter: Optional[str] = None
     search_text: str = ""
     sort_by: str = "title"  # "title", "last_played", "rating", "launch_count", "last_checked"
+
+
+class SearchCache:
+    """
+    Cache for pre-computed search haystacks.
+
+    Improves search performance by caching the haystack strings
+    for each game, avoiding repeated string building on every search.
+
+    Usage:
+        cache = SearchCache()
+        # After loading/modifying games:
+        cache.build(games)
+        # For searching:
+        matches = cache.search(games, "query")
+        # After editing a game:
+        cache.invalidate(game_id)
+    """
+
+    def __init__(self, max_size: int = 10000) -> None:
+        """
+        Initialize the search cache.
+
+        Args:
+            max_size: Maximum number of games to cache (prevents memory issues)
+        """
+        self._cache: Dict[str, str] = {}  # game_id -> haystack
+        self._dirty: Set[str] = set()  # game_ids needing rebuild
+        self._max_size = max_size
+
+    def build(self, games: List[Game]) -> None:
+        """
+        Build/rebuild the cache for a list of games.
+
+        Args:
+            games: List of games to cache
+        """
+        # Clear cache if it would exceed max size
+        if len(games) > self._max_size:
+            self._cache.clear()
+            self._dirty.clear()
+            return
+
+        # Remove stale entries
+        current_ids = {g.game_id for g in games}
+        stale_ids = set(self._cache.keys()) - current_ids
+        for game_id in stale_ids:
+            del self._cache[game_id]
+
+        # Build haystacks for new/dirty games
+        for game in games:
+            if game.game_id not in self._cache or game.game_id in self._dirty:
+                self._cache[game.game_id] = build_search_haystack(game)
+                self._dirty.discard(game.game_id)
+
+    def get_haystack(self, game: Game) -> str:
+        """
+        Get the cached haystack for a game.
+
+        Args:
+            game: The game to get haystack for
+
+        Returns:
+            The cached haystack, or builds it if not cached
+        """
+        if game.game_id in self._dirty or game.game_id not in self._cache:
+            self._cache[game.game_id] = build_search_haystack(game)
+            self._dirty.discard(game.game_id)
+        return self._cache[game.game_id]
+
+    def invalidate(self, game_id: str) -> None:
+        """
+        Mark a game's cache entry as needing rebuild.
+
+        Call this after modifying a game's searchable fields.
+
+        Args:
+            game_id: The ID of the modified game
+        """
+        self._dirty.add(game_id)
+
+    def invalidate_all(self) -> None:
+        """Mark all entries as needing rebuild."""
+        self._dirty.update(self._cache.keys())
+
+    def clear(self) -> None:
+        """Clear the entire cache."""
+        self._cache.clear()
+        self._dirty.clear()
+
+    def search(self, games: List[Game], query: str) -> List[Game]:
+        """
+        Search games using cached haystacks.
+
+        Args:
+            games: List of games to search
+            query: Search query (will be lowercased)
+
+        Returns:
+            List of games matching the query
+        """
+        if not query:
+            return games
+
+        query_lower = query.strip().lower()
+        if not query_lower:
+            return games
+
+        return [g for g in games if query_lower in self.get_haystack(g)]
+
+    @property
+    def size(self) -> int:
+        """Return the number of cached entries."""
+        return len(self._cache)
+
+    @property
+    def dirty_count(self) -> int:
+        """Return the number of dirty entries."""
+        return len(self._dirty)
+
+
+# Global search cache instance
+_search_cache: Optional[SearchCache] = None
+
+
+def get_search_cache() -> SearchCache:
+    """Get the global search cache instance."""
+    global _search_cache
+    if _search_cache is None:
+        _search_cache = SearchCache()
+    return _search_cache
 
 
 def is_game_missing(game: Game) -> bool:
