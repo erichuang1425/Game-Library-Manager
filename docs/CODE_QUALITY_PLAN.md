@@ -977,11 +977,23 @@ class TestDownloadManager:
 - [x] Migrate `smart_download.py` to use `http_utils`
 - [x] Migrate `update_checker.py` to use `http_utils`
 
-### Sprint 3: Modularization Part 1 (Week 5-6) 🔄 IN PROGRESS
+### Sprint 3: Modularization Part 1 (Week 5-6) ✅ COMPLETED
 
 - [x] Create `filter_utils.py` module - filtering, sorting, search utilities
 - [x] Migrate `main_window.py` to use filter utilities (reduced ~65 lines)
-- [ ] MOD-001: Split `main_window.py` into focused modules
+- [x] MOD-001: Split `main_window.py` into package (COMPLETED):
+  - `main_window/scan_mixin.py` - Scan operations (~274 lines)
+  - `main_window/update_mixin.py` - Update check operations (~113 lines)
+  - `main_window/filter_mixin.py` - Filter/search operations (~223 lines)
+  - `main_window/dialog_mixin.py` - Dialog management (~258 lines)
+  - `main_window/collection_mixin.py` - Collection operations (~250 lines)
+  - `main_window/game_ops_mixin.py` - Game CRUD operations (~279 lines)
+  - `main_window/actions_mixin.py` - Shortcuts, export/import (~207 lines)
+  - `main_window/ui_mixin.py` - UI helpers, startup overlay (~265 lines)
+  - `main_window/batch_mixin.py` - Multi-select operations (~89 lines)
+  - `main_window/window.py` - Core MainWindow (~576 lines)
+  - `main_window/__init__.py` - Package exports
+  - Removed old monolithic `main_window.py` (2,364 lines deleted)
 - [x] MOD-002: Split `game_grid.py` into package (COMPLETED):
   - `game_grid/display_utils.py` - status_label, stars, relative_time (~70 lines)
   - `game_grid/skeleton.py` - SkeletonCard class (~85 lines)
@@ -989,7 +1001,7 @@ class TestDownloadManager:
   - `game_grid/grid.py` - GameGrid class (~480 lines)
   - `game_grid/__init__.py` - Package exports
   - Removed old monolithic `game_grid.py` (1,187 lines deleted)
-- [x] Update imports for game_grid package
+- [x] Update imports for game_grid and main_window packages
 
 ### Sprint 4: Modularization Part 2 (Week 7-8)
 
@@ -1017,16 +1029,16 @@ class TestDownloadManager:
 
 ### Files Requiring Immediate Attention
 
-| File | Lines | Priority | Action |
-|------|-------|----------|--------|
-| `main_window.py` | 2,436 | HIGH | Split into 5-6 modules |
-| `game_grid.py` | 1,187 | HIGH | Split into 3-4 modules |
-| `archive_extractor.py` | 853 | MEDIUM | Split by format |
-| `bulk_archive_import_dialog.py` | 751 | MEDIUM | Extract logic |
-| `f95_api.py` | 703 | MEDIUM | Extract parsers |
-| `download_manager.py` | 679 | MEDIUM | Split components |
-| `f95_auth.py` | 678 | MEDIUM | Extract storage |
-| `smart_download.py` | 627 | LOW | Consolidate with manager |
+| File | Lines | Priority | Action | Status |
+|------|-------|----------|--------|--------|
+| `main_window.py` | 2,364 | HIGH | Split into 10 modules | ✅ DONE - Now `main_window/` package |
+| `game_grid.py` | 1,187 | HIGH | Split into 4 modules | ✅ DONE - Now `game_grid/` package |
+| `archive_extractor.py` | 853 | MEDIUM | Split by format | Pending |
+| `bulk_archive_import_dialog.py` | 751 | MEDIUM | Extract logic | Pending |
+| `f95_api.py` | 703 | MEDIUM | Extract parsers | Pending |
+| `download_manager.py` | 679 | MEDIUM | Split components | Pending |
+| `f95_auth.py` | 678 | MEDIUM | Extract storage | Pending |
+| `smart_download.py` | 627 | LOW | Consolidate with manager | Pending |
 
 ### Duplicate Code Hotspots
 
@@ -1064,6 +1076,24 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 ---
 
 ## Changelog
+
+### Version 1.7 (2026-02-03)
+- Completed MOD-001: Split `main_window.py` (2,364 lines) into mixin-based package:
+  - `main_window/scan_mixin.py` (~274 lines) - Scan operations
+  - `main_window/update_mixin.py` (~113 lines) - Update check operations
+  - `main_window/filter_mixin.py` (~223 lines) - Filter/search operations
+  - `main_window/dialog_mixin.py` (~258 lines) - Dialog management
+  - `main_window/collection_mixin.py` (~250 lines) - Collection operations
+  - `main_window/game_ops_mixin.py` (~279 lines) - Game CRUD operations
+  - `main_window/actions_mixin.py` (~207 lines) - Keyboard shortcuts, export/import
+  - `main_window/ui_mixin.py` (~265 lines) - UI helpers, startup overlay
+  - `main_window/batch_mixin.py` (~89 lines) - Multi-select batch operations
+  - `main_window/window.py` (~576 lines) - Core MainWindow combining all mixins
+  - `main_window/__init__.py` - Package exports for backward compatibility
+- Removed old monolithic `main_window.py` file (2,364 lines deleted)
+- Sprint 3 (Modularization Part 1) now fully complete
+- All modules under 600 lines (window.py is the main orchestrator)
+- Improved separation of concerns: scan, update, filter, dialog, collection, game ops, actions, UI
 
 ### Version 1.6 (2026-02-03)
 - Implemented PERF-002: Search haystack caching
@@ -1134,5 +1164,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.6*
+*Document Version: 1.7*
 *Last Updated: 2026-02-03*
