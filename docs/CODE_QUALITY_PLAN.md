@@ -991,25 +991,47 @@ class TestDownloadManager:
   - Removed old monolithic `game_grid.py` (1,187 lines deleted)
 - [x] Update imports for game_grid package
 
-### Sprint 4: Modularization Part 2 (Week 7-8)
+### Sprint 4: Modularization Part 2 (Week 7-8) ✅ COMPLETED
 
-- [ ] MOD-003: Split `archive_extractor.py`
-- [ ] MOD-004: Split `download_manager.py`
-- [ ] DUP-004: Refactor remaining host handlers
+- [x] MOD-003: Split `archive_extractor.py` into modular package:
+  - `archive/formats/base.py` - FormatHandler ABC (~120 lines)
+  - `archive/formats/zip_handler.py` - ZIP handler (~120 lines)
+  - `archive/formats/rar_handler.py` - RAR handler (~130 lines)
+  - `archive/formats/sevenz_handler.py` - 7z handler (~120 lines)
+  - `archive/extractor.py` - Main orchestrator (~380 lines)
+  - `archive/utils.py` - Shared utilities (~350 lines)
+- [ ] MOD-004: Split `download_manager.py` (deferred - already well-structured)
+- [ ] DUP-004: Refactor remaining host handlers (deferred)
 
-### Sprint 5: Performance (Week 9-10)
+### Sprint 5: Performance (Week 9-10) ✅ COMPLETED
 
 - [x] PERF-001: Implement fuzzy matching index (TitleIndex class in title_matcher.py)
 - [x] PERF-002: Add search haystack caching (SearchCache class in filter_utils.py)
-- [ ] PERF-003: Implement virtual scrolling
-- [ ] PERF-004: Add cache bounds
+- [ ] PERF-003: Implement virtual scrolling (deferred - requires UI testing)
+- [x] PERF-004: Add LRU cache bounds:
+  - Created `cache_utils.py` with BoundedCache class (~280 lines)
+  - Thread-safe OrderedDict-based LRU implementation
+  - TTL support for time-based expiration
+  - Updated `update_checker.py` to use bounded caches
 
-### Sprint 6: Architecture (Week 11-12)
+### Sprint 6: Architecture (Week 11-12) ✅ COMPLETED
 
-- [ ] ARCH-001: Implement repository pattern
-- [ ] ARCH-002: Add event bus
-- [ ] ARCH-003: Centralize configuration
-- [ ] Increase test coverage to >40%
+- [x] ARCH-001: Implement repository pattern:
+  - Created `repositories/` package
+  - `base.py` - Repository ABC (~100 lines)
+  - `game_repository.py` - GameRepository with JSON storage (~240 lines)
+  - `collection_repository.py` - CollectionRepository (~220 lines)
+- [x] ARCH-002: Add event bus:
+  - Created `events/` package
+  - `event_bus.py` - Thread-safe pub/sub implementation (~360 lines)
+  - Supports priorities, weak refs, one-time subscriptions
+  - Event history for debugging
+- [x] ARCH-003: Centralize configuration:
+  - Created `config/` package
+  - `app_config.py` - Type-safe configuration (~350 lines)
+  - NetworkConfig, CacheConfig, UIConfig, DownloadConfig sections
+  - Validation on assignment, JSON persistence
+- [ ] Increase test coverage to >40% (ongoing)
 
 ---
 
@@ -1064,6 +1086,48 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 ---
 
 ## Changelog
+
+### Version 1.9 (2026-02-03)
+- Implemented ARCH-003: Centralized configuration management
+  - Created `config/` package with type-safe configuration
+  - `app_config.py` - AppConfig with nested sections (~350 lines)
+  - NetworkConfig, CacheConfig, UIConfig, DownloadConfig dataclasses
+  - Validation on assignment, JSON persistence support
+  - Global accessor `get_config()` for application-wide access
+
+### Version 1.8 (2026-02-03)
+- Implemented ARCH-002: Event bus for decoupled communication
+  - Created `events/` package
+  - `event_bus.py` - Thread-safe pub/sub implementation (~360 lines)
+  - 30+ predefined events for games, downloads, archives, UI, etc.
+  - Priority-based handler ordering
+  - Weak references support to prevent memory leaks
+  - One-time subscriptions, event history for debugging
+  - Convenience functions: emit(), subscribe(), unsubscribe()
+
+### Version 1.7 (2026-02-03)
+- Implemented ARCH-001: Repository pattern for data access
+  - Created `repositories/` package
+  - `base.py` - Generic Repository ABC (~100 lines)
+  - `game_repository.py` - GameRepository with JSON storage (~240 lines)
+  - `collection_repository.py` - CollectionRepository (~220 lines)
+  - In-memory caching with lazy loading
+  - Bulk operations for efficient batch updates
+  - Query methods: find_by_title, find_by_status, find_by_tag, etc.
+- Implemented PERF-004: LRU cache bounds
+  - Created `cache_utils.py` with BoundedCache class (~280 lines)
+  - Thread-safe OrderedDict-based LRU implementation
+  - TTL support for time-based expiration
+  - Updated `update_checker.py` to use bounded caches (100 HTML, 200 parsed)
+- Implemented MOD-003: Split archive_extractor.py into modular package
+  - Created `archive/` package with pluggable format handlers
+  - `formats/base.py` - FormatHandler ABC with consistent interface (~120 lines)
+  - `formats/zip_handler.py` - ZIP format handler (~120 lines)
+  - `formats/rar_handler.py` - RAR format handler with rarfile (~130 lines)
+  - `formats/sevenz_handler.py` - 7z format handler with py7zr (~120 lines)
+  - `extractor.py` - ArchiveExtractor orchestrator with auto-detection (~380 lines)
+  - `utils.py` - Shared utilities (passwords, multipart, parsing) (~350 lines)
+  - Backward-compatible exports maintained in package __init__.py
 
 ### Version 1.6 (2026-02-03)
 - Implemented PERF-002: Search haystack caching
@@ -1134,5 +1198,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.6*
+*Document Version: 1.9*
 *Last Updated: 2026-02-03*
