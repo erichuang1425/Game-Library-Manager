@@ -23,7 +23,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from app.logging_utils import get_logger, kv
 from app.models import Game
-from app.services.archive_extractor import (
+from app.services.archive import (
     ArchiveFormat,
     ExtractionResult,
     ScannedArchive,

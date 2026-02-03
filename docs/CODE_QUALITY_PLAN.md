@@ -1003,10 +1003,22 @@ class TestDownloadManager:
   - Removed old monolithic `game_grid.py` (1,187 lines deleted)
 - [x] Update imports for game_grid and main_window packages
 
-### Sprint 4: Modularization Part 2 (Week 7-8)
+### Sprint 4: Modularization Part 2 (Week 7-8) ✅ COMPLETED
 
-- [ ] MOD-003: Split `archive_extractor.py`
-- [ ] MOD-004: Split `download_manager.py`
+- [x] MOD-003: Split `archive_extractor.py` into package (COMPLETED):
+  - `archive/models.py` (~94 lines) - ArchiveFormat, ExtractionResult, ArchiveInfo, ScannedArchive
+  - `archive/detection.py` (~189 lines) - Format detection, multipart handling
+  - `archive/passwords.py` (~123 lines) - Password management
+  - `archive/extraction.py` (~236 lines) - Format-specific extraction functions
+  - `archive/utils.py` (~249 lines) - Scanning, title parsing utilities
+  - `archive/__init__.py` - Package exports
+  - Removed old monolithic `archive_extractor.py` (853 lines deleted)
+- [x] MOD-004: Split `download_manager.py` into package (COMPLETED):
+  - `download/models.py` (~100 lines) - DownloadStatus, DownloadProgress, DownloadItem, DownloadHistory
+  - `download/worker.py` (~230 lines) - DownloadWorker QThread
+  - `download/manager.py` (~320 lines) - DownloadManager with queue and history
+  - `download/__init__.py` - Package exports
+  - Removed old monolithic `download_manager.py` (687 lines deleted)
 - [ ] DUP-004: Refactor remaining host handlers
 
 ### Sprint 5: Performance (Week 9-10)
@@ -1033,10 +1045,10 @@ class TestDownloadManager:
 |------|-------|----------|--------|--------|
 | `main_window.py` | 2,364 | HIGH | Split into 10 modules | ✅ DONE - Now `main_window/` package |
 | `game_grid.py` | 1,187 | HIGH | Split into 4 modules | ✅ DONE - Now `game_grid/` package |
-| `archive_extractor.py` | 853 | MEDIUM | Split by format | Pending |
+| `archive_extractor.py` | 853 | MEDIUM | Split by format | ✅ DONE - Now `archive/` package |
 | `bulk_archive_import_dialog.py` | 751 | MEDIUM | Extract logic | Pending |
 | `f95_api.py` | 703 | MEDIUM | Extract parsers | Pending |
-| `download_manager.py` | 679 | MEDIUM | Split components | Pending |
+| `download_manager.py` | 679 | MEDIUM | Split components | ✅ DONE - Now `download/` package |
 | `f95_auth.py` | 678 | MEDIUM | Extract storage | Pending |
 | `smart_download.py` | 627 | LOW | Consolidate with manager | Pending |
 
@@ -1076,6 +1088,27 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 ---
 
 ## Changelog
+
+### Version 1.8 (2026-02-03)
+- Completed Sprint 4: Modularization Part 2
+- MOD-003: Split `archive_extractor.py` (853 lines) into package:
+  - `archive/models.py` (~94 lines) - ArchiveFormat, ExtractionResult, ArchiveInfo, ScannedArchive
+  - `archive/detection.py` (~189 lines) - Format detection, multipart archive handling
+  - `archive/passwords.py` (~123 lines) - Password management with custom passwords support
+  - `archive/extraction.py` (~236 lines) - Format-specific extraction (ZIP, RAR, 7z)
+  - `archive/utils.py` (~249 lines) - Archive scanning, title parsing, similarity matching
+  - `archive/__init__.py` - Package exports for backward compatibility
+  - Removed old monolithic file (853 lines deleted)
+- MOD-004: Split `download_manager.py` (687 lines) into package:
+  - `download/models.py` (~100 lines) - DownloadStatus, DownloadProgress, DownloadItem, DownloadHistory, format utilities
+  - `download/worker.py` (~230 lines) - DownloadWorker QThread with pause/resume/cancel
+  - `download/manager.py` (~320 lines) - DownloadManager with queue, history, singleton access
+  - `download/__init__.py` - Package exports for backward compatibility
+  - Removed old monolithic file (687 lines deleted)
+- Updated services/__init__.py imports for both packages
+- Total: 1,540 lines of monolithic code replaced with well-organized packages
+- All new modules under 320 lines (well within 500 line target)
+- Sprint 4 now fully complete
 
 ### Version 1.7 (2026-02-03)
 - Completed MOD-001: Split `main_window.py` (2,364 lines) into mixin-based package:
@@ -1164,5 +1197,5 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
 
 ---
 
-*Document Version: 1.7*
+*Document Version: 1.8*
 *Last Updated: 2026-02-03*
