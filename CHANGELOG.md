@@ -1,3 +1,17 @@
+## v4.1 (2026-02-03) - Code Quality Release
+- **Major Refactoring:** Split 4 monolithic files (5,091 lines) into organized packages:
+  - `main_window.py` → `main_window/` package with 10 focused mixins
+  - `game_grid.py` → `game_grid/` package (card, grid, skeleton, display_utils)
+  - `archive_extractor.py` → `archive/` package (models, detection, extraction, passwords, utils)
+  - `download_manager.py` → `download/` package (models, worker, manager)
+- **Code Deduplication:** Created shared utility modules:
+  - `http_utils.py` - Centralized HTTP operations, error handling, download functions
+  - `title_matcher.py` - Fuzzy matching with TitleIndex for O(n) performance
+  - `filter_utils.py` - Search caching and filter pipelines
+- **Bug Fixes:** Resolved all P0/P1 critical bugs including race conditions in download manager and exception dialog
+- **Performance:** Search haystack caching, fuzzy matching index (PERF-001, PERF-002)
+- **Metrics:** Reduced codebase from ~39K to ~21K lines, average file size from 547 to 219 lines
+
 ## v4 (2026-02-01)
 - Icon revamp: request jumbo 1024px shell icons, pick the best available source (shortcut → resolved target → archive), and downscale once for crisp cards. Scan now primes icons only for newly touched games and remembers the upscale flag to avoid rework.
 - Scan UX: queued worker signals keep the progress dialog responsive and fix the `QObject::startTimer` warning; a modal scan summary reports totals/new/updated/icons refreshed; duplicate detection shows a wait cursor and optional quarantine before scanning.
