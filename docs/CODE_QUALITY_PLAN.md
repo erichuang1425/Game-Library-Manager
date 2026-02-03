@@ -982,13 +982,14 @@ class TestDownloadManager:
 - [x] Create `filter_utils.py` module - filtering, sorting, search utilities
 - [x] Migrate `main_window.py` to use filter utilities (reduced ~65 lines)
 - [ ] MOD-001: Split `main_window.py` into focused modules
-- [x] MOD-002: Split `game_grid.py` into package:
+- [x] MOD-002: Split `game_grid.py` into package (COMPLETED):
   - `game_grid/display_utils.py` - status_label, stars, relative_time (~70 lines)
   - `game_grid/skeleton.py` - SkeletonCard class (~85 lines)
   - `game_grid/card.py` - GameCard class (~520 lines)
   - `game_grid/grid.py` - GameGrid class (~480 lines)
   - `game_grid/__init__.py` - Package exports
-- [ ] Update all imports and tests
+  - Removed old monolithic `game_grid.py` (1,187 lines deleted)
+- [x] Update imports for game_grid package
 
 ### Sprint 4: Modularization Part 2 (Week 7-8)
 
@@ -1071,8 +1072,11 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
   - `game_grid/card.py` (~520 lines) - GameCard with hover overlay, multi-select, animations
   - `game_grid/grid.py` (~480 lines) - GameGrid with keyboard nav, empty state, skeleton loading
   - `game_grid/__init__.py` - Package exports for backward compatibility
+- Removed old monolithic `game_grid.py` file (1,187 lines deleted)
+- Imports updated - widgets/__init__.py now uses the package
 - Improved separation of concerns and testability
 - Each module is now under 600 lines (target: <500)
+- Net reduction: ~35 lines through deduplication during refactoring
 
 ### Version 1.4 (2026-02-02)
 - Started Sprint 3: Modularization Part 1
