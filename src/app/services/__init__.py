@@ -62,7 +62,7 @@ from .bulk_archive_import import (
     MatchResult, format_size
 )
 from .filter_utils import (
-    FilterConfig,
+    FilterConfig, SearchCache, get_search_cache,
     is_game_missing, game_needs_update,
     build_search_haystack, match_search,
     apply_quick_filter, apply_dropdown_filters, apply_search_filter,
