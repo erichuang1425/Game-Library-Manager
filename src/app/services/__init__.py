@@ -49,13 +49,19 @@ from .download_manager import (
     DownloadManager, DownloadItem, DownloadStatus, DownloadProgress,
     get_download_manager, format_size, format_speed, format_eta
 )
-from .archive_extractor import (
+# Archive extraction (modular package - MOD-003)
+from .archive import (
     ArchiveFormat, ExtractionResult, ArchiveInfo, ScannedArchive,
-    detect_format, get_archive_info, extract_archive,
+    detect_format, get_archive_info, extract_archive, try_passwords,
     find_executables, find_save_folder,
     add_custom_password, remove_custom_password, get_custom_passwords,
     set_custom_passwords, get_all_passwords, load_custom_passwords, save_custom_passwords,
-    scan_for_archives, parse_archive_filename, normalize_title, calculate_title_similarity
+    scan_for_archives, parse_archive_filename, normalize_title, calculate_title_similarity,
+    # New exports from modular architecture
+    ArchiveExtractor, get_extractor, FormatHandler, ProgressCallback,
+    ZipHandler, RarHandler, SevenZipHandler,
+    find_first_part, find_all_parts, is_multipart, is_later_part,
+    ARCHIVE_EXTENSIONS, COMMON_PASSWORDS,
 )
 from .bulk_archive_import import (
     BulkArchiveImporter, ImportItem, ImportResult, ImportAction, ImportStatus,
@@ -67,4 +73,9 @@ from .filter_utils import (
     build_search_haystack, match_search,
     apply_quick_filter, apply_dropdown_filters, apply_search_filter,
     sort_games, filter_and_sort_games, count_quick_filter_matches,
+)
+# Cache utilities (PERF-004)
+from .cache_utils import (
+    BoundedCache, TimestampedCache, cached,
+    create_html_cache, create_version_cache, create_icon_cache,
 )
