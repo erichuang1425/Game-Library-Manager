@@ -3,19 +3,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import time
 
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QTimer
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFrame, QVBoxLayout, QLabel,
     QProgressBar, QGraphicsOpacityEffect, QMessageBox,
 )
 
 from app.storage import settings_json_path, save_settings
-from app.ui.theme import apply_theme
+from app.ui.theme import apply_theme, is_reduced_motion
 from app.ui.dialogs import PreferencesDialog
 from app.logging_utils import kv
 
 if TYPE_CHECKING:
     from .window import MainWindow
+
+
+# Breakpoint thresholds
+_BP_COMPACT = 900
+_BP_DEFAULT = 1200
 
 
 class UIMixin:
@@ -144,16 +149,49 @@ class UIMixin:
             self._persist_settings()
         self._apply_details_visibility()
 
-    def _apply_details_visibility(self: "MainWindow", initial: bool = False) -> None:
+    def _apply_details_visibility(
+        self: "MainWindow", initial: bool = False, animate: bool = False,
+    ) -> None:
         if self._details_visible and not self._focus_mode:
             self._details_widget.show()
-            if not initial:
-                self._splitter.setSizes([220, max(600, self.width() - 560), 340])
+            target = [220, max(600, self.width() - 560), 340]
         else:
-            self._details_widget.hide()
-            if not initial:
-                self._splitter.setSizes([220, max(700, self.width() - 220), 0])
+            target = [220, max(700, self.width() - 220), 0]
+
+        if animate and not is_reduced_motion() and not initial:
+            self._animate_splitter(target)
+        else:
+            if not self._details_visible:
+                self._details_widget.hide()
+            self._splitter.setSizes(target)
         self.grid.refresh()
+
+    def _animate_splitter(self: "MainWindow", target_sizes: list) -> None:
+        """Smoothly animate splitter to target sizes."""
+        current = self._splitter.sizes()
+        if len(current) != 3 or len(target_sizes) != 3:
+            self._splitter.setSizes(target_sizes)
+            return
+
+        steps = 8
+        step_delay = 20  # ms
+
+        def step_fn(i: int = 0):
+            if i >= steps:
+                self._splitter.setSizes(target_sizes)
+                if not self._details_visible:
+                    self._details_widget.hide()
+                return
+            t = (i + 1) / steps
+            t_ease = 1 - (1 - t) ** 3  # ease-out cubic
+            interpolated = [
+                int(current[j] + (target_sizes[j] - current[j]) * t_ease)
+                for j in range(3)
+            ]
+            self._splitter.setSizes(interpolated)
+            QTimer.singleShot(step_delay, lambda: step_fn(i + 1))
+
+        step_fn()
 
     def _reset_layout(self: "MainWindow") -> None:
         self._splitter.setSizes([200, 900, 320 if self._details_visible else 0])
@@ -169,21 +207,68 @@ class UIMixin:
         self.style().polish(self)
         self.update()
 
+    # ---------- Responsive breakpoint system ----------
     def _apply_responsive_type(self: "MainWindow") -> None:
-        """Step-based responsive typography based on window width buckets."""
+        """Responsive layout adjustments based on window width breakpoints.
+
+        < 900px:   Compact - sidebar collapses, details hidden, icons-only toolbar
+        900-1200:  Default - sidebar visible, optional details, full toolbar
+        > 1200px:  Expanded - wide sidebar, details visible, spacious toolbar
+        """
         width = self.width()
+
+        # Typography scale
         bucket = "normal"
         if width < 1100:
             bucket = "small"
         elif width > 1500:
             bucket = "large"
-        if bucket == self._type_scale_bucket:
+
+        if bucket != self._type_scale_bucket:
+            self._type_scale_bucket = bucket
+            self.grid.set_type_scale(bucket)
+            font_delta = {"small": -1, "normal": 0, "large": 1}[bucket]
+            self._bump_table_font(self.updates.table, base=10 + font_delta)
+            self._bump_table_font(self.health.table, base=10 + font_delta)
+
+        # Breakpoint-based layout adjustments
+        bp = "compact" if width < _BP_COMPACT else ("default" if width <= _BP_DEFAULT else "expanded")
+        prev_bp = getattr(self, "_current_breakpoint", None)
+        if bp == prev_bp:
             return
-        self._type_scale_bucket = bucket
-        self.grid.set_type_scale(bucket)
-        font_delta = {"small": -1, "normal": 0, "large": 1}[bucket]
-        self._bump_table_font(self.updates.table, base=10 + font_delta)
-        self._bump_table_font(self.health.table, base=10 + font_delta)
+        self._current_breakpoint = bp
+
+        if bp == "compact":
+            if hasattr(self, 'sidebar') and not self.sidebar.is_collapsed():
+                self.sidebar.set_collapsed(True, animate=True)
+            if self._details_visible and not self._focus_mode:
+                self._details_widget.hide()
+            self._set_toolbar_compact(True)
+        elif bp == "default":
+            if hasattr(self, 'sidebar') and self.sidebar.is_collapsed():
+                self.sidebar.set_collapsed(False, animate=True)
+            if self._details_visible and not self._focus_mode:
+                self._details_widget.show()
+            self._set_toolbar_compact(False)
+        else:  # expanded
+            if hasattr(self, 'sidebar') and self.sidebar.is_collapsed():
+                self.sidebar.set_collapsed(False, animate=True)
+            if self._details_visible and not self._focus_mode:
+                self._details_widget.show()
+            self._set_toolbar_compact(False)
+
+    def _set_toolbar_compact(self: "MainWindow", compact: bool) -> None:
+        """Collapse toolbar buttons to icons-only in compact mode."""
+        from app.ui.icons import AppIcons
+        if compact:
+            self.scan_btn.setText(AppIcons.ACT_SCAN)
+            self.check_updates_btn.setText(AppIcons.NAV_UPDATES)
+        else:
+            self.scan_btn.setText(f"{AppIcons.ACT_SCAN}  Scan")
+            self.check_updates_btn.setText(f"{AppIcons.NAV_UPDATES}  Updates")
+        # Hide less-essential filters in compact mode
+        for widget in (self.conf_filter, self.type_filter):
+            widget.setVisible(not compact)
 
     def _bump_table_font(self: "MainWindow", table, base: int) -> None:
         f = table.font()
@@ -226,7 +311,7 @@ class UIMixin:
             layout.setSpacing(12)
             title = QLabel("Game Library Manager")
             title.setStyleSheet("color: white; font-size: 18px; font-weight: 700;")
-            status = QLabel("Starting…")
+            status = QLabel("Starting\u2026")
             status.setStyleSheet("color: #dce7ff; font-size: 12px;")
             bar = QProgressBar()
             bar.setRange(0, 0)

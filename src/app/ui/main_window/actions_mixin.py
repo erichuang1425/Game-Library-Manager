@@ -61,6 +61,19 @@ class ActionsMixin:
         # Layout Customization: Ctrl+L
         QShortcut(QKeySequence("Ctrl+L"), self, self._open_layout_customization)
 
+        # Sidebar navigation: Ctrl+1-5
+        QShortcut(QKeySequence("Ctrl+1"), self, lambda: self._nav_sidebar_section(0))
+        QShortcut(QKeySequence("Ctrl+2"), self, lambda: self._nav_sidebar_section(1))
+        QShortcut(QKeySequence("Ctrl+3"), self, lambda: self._nav_sidebar_section(2))
+        QShortcut(QKeySequence("Ctrl+4"), self, lambda: self._nav_sidebar_section(3))
+        QShortcut(QKeySequence("Ctrl+5"), self, lambda: self._nav_sidebar_section(4))
+
+        # Grid focus: Ctrl+G
+        QShortcut(QKeySequence("Ctrl+G"), self, self._focus_grid)
+
+        # Reset layout: Ctrl+Shift+R
+        QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._reset_layout)
+
     def _focus_search(self: "MainWindow") -> None:
         """Focus the search bar."""
         self.search.setFocus()
@@ -74,12 +87,27 @@ class ActionsMixin:
         self.grid.select_all()
 
     def _on_escape_pressed(self: "MainWindow") -> None:
-        """Handle Escape key."""
+        """Handle Escape key: progressive dismiss (select > search > focus > details)."""
         if self.select_btn.isChecked():
             self._exit_multi_select_mode()
-        elif self.search.hasFocus():
+        elif self.search.hasFocus() and self.search.text():
             self.search.clear()
             self.grid.setFocus()
+        elif self.search.hasFocus():
+            self.grid.setFocus()
+        elif self._details_visible and not self._focus_mode:
+            self.details_toggle.setChecked(False)
+            self._toggle_details_panel()
+
+    def _nav_sidebar_section(self: "MainWindow", index: int) -> None:
+        """Navigate to a sidebar item by Ctrl+N shortcut."""
+        if hasattr(self, 'sidebar'):
+            self.sidebar.select_by_index(index)
+
+    def _focus_grid(self: "MainWindow") -> None:
+        """Focus the game grid and activate keyboard navigation."""
+        self.grid.setFocus()
+        self.grid.focus_first()
 
     def _show_export_dialog(self: "MainWindow") -> None:
         """Show export dialog."""
