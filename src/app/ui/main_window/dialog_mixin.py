@@ -33,7 +33,7 @@ class DialogMixin:
         self._details_visible = desired
         self._settings["details_visible"] = self._details_visible
         self._persist_settings()
-        self._apply_details_visibility()
+        self._apply_details_visibility(animate=True)
 
     def _open_preferences(self: "MainWindow") -> None:
         dlg = PreferencesDialog(

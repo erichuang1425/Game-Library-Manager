@@ -14,7 +14,7 @@ from PySide6.QtGui import QColor
 from app.models import Game
 from app.ui.theme import (
     current_theme, primary_btn_style, secondary_btn_style, ghost_btn_style,
-    section_header_style, status_color,
+    section_header_style, collapsible_header_style, status_color,
 )
 from app.ui.icons import AppIcons
 from app.ui.typography import get_scale, title_style, caption_style, label_style
@@ -248,14 +248,60 @@ class DetailsPanel(QWidget):
 
         layout.addStretch(1)
 
+        # Register section widgets for collapsible toggling
+        # Each layout/widget added after a section header belongs to that section
+        self._register_section_widget("STATUS & RATING", self.status)
+        self._register_section_widget("STATUS & RATING", self.rating)
+        self._register_section_widget("TAGS", self.tags)
+        self._register_section_widget("NOTES", self.notes)
+        self._register_section_widget("SOURCE", self.source_url)
+        self._register_section_widget("SOURCE", self.open_source_btn)
+        self._register_section_widget("SOURCE", self.installed_ver)
+        self._register_section_widget("SOURCE", self.source_ver)
+        self._register_section_widget("ARCHIVES", self.archive_folder)
+        self._register_section_widget("ARCHIVES", self.pick_archive_folder)
+        self._register_section_widget("ARCHIVES", self.open_archive_folder)
+        self._register_section_widget("ARCHIVES", self.compressed_path)
+        self._register_section_widget("ARCHIVES", self.pick_compressed)
+        self._register_section_widget("ARCHIVES", self.open_compressed)
+        self._register_section_widget("INFO", self.launcher_info)
+        self._register_section_widget("INFO", self.last_played)
+
         scroll.setWidget(inner)
         outer.addWidget(scroll)
 
-    @staticmethod
-    def _section_header(text: str, theme) -> QLabel:
-        lbl = QLabel(text)
-        lbl.setStyleSheet(section_header_style(theme))
-        return lbl
+    def _section_header(self, text: str, theme) -> QPushButton:
+        """Create a collapsible section header."""
+        btn = QPushButton(f"\u25BE  {text}")
+        btn.setStyleSheet(collapsible_header_style(theme))
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFlat(True)
+        btn._section_text = text
+        btn._collapsed = False
+        btn._section_widgets = []
+        btn.clicked.connect(lambda: self._toggle_section(btn))
+        # Track sections for toggling
+        if not hasattr(self, '_section_btns'):
+            self._section_btns = []
+        self._section_btns.append(btn)
+        return btn
+
+    def _toggle_section(self, btn: QPushButton) -> None:
+        """Toggle visibility of section content widgets."""
+        btn._collapsed = not btn._collapsed
+        icon = "\u25B8" if btn._collapsed else "\u25BE"
+        btn.setText(f"{icon}  {btn._section_text}")
+        for w in btn._section_widgets:
+            w.setVisible(not btn._collapsed)
+
+    def _register_section_widget(self, section_text: str, widget) -> None:
+        """Register a widget to be toggled by a section header."""
+        if not hasattr(self, '_section_btns'):
+            return
+        for btn in self._section_btns:
+            if btn._section_text == section_text:
+                btn._section_widgets.append(widget)
+                return
 
     # ---- public API ----
 

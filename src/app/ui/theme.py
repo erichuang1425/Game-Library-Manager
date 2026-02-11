@@ -38,6 +38,17 @@ class ThemeSpec:
     surface_sunken: QColor = None  # type: ignore[assignment]
     # Header gradient
     header_bg: QColor = None  # type: ignore[assignment]
+    # Surface overlay (with alpha for dropdowns/modals)
+    surface_overlay: QColor = None  # type: ignore[assignment]
+    # Interactive states
+    interactive_hover: QColor = None  # type: ignore[assignment]
+    interactive_active: QColor = None  # type: ignore[assignment]
+    interactive_muted: QColor = None  # type: ignore[assignment]
+    # Feedback: info
+    info: QColor = None  # type: ignore[assignment]
+    # Gradient support (for header/hero gradients)
+    gradient_start: QColor = None  # type: ignore[assignment]
+    gradient_end: QColor = None  # type: ignore[assignment]
     # Design tokens - spacing (8px grid system)
     spacing_xs: int = 4
     spacing_sm: int = 8
@@ -66,6 +77,14 @@ class ThemeSpec:
     toolbar_height: int = 48
     grid_gap: int = 14
     grid_padding: int = 16
+    card_min_width: int = 200
+    card_max_width: int = 320
+    # Section spacing
+    section_gap: int = 24
+    content_gap: int = 16
+    inline_gap: int = 8
+    # Sidebar collapsed width (icon-only)
+    sidebar_collapsed_width: int = 48
 
 
 def _c(r: int, g: int, b: int, a: int = 255) -> QColor:
@@ -100,6 +119,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(44, 50, 62),
         surface_sunken=_c(16, 18, 24),
         header_bg=_c(24, 27, 35),
+        surface_overlay=_c(20, 23, 30, 200),
+        interactive_hover=_c(60, 70, 88),
+        interactive_active=_c(50, 58, 74),
+        interactive_muted=_c(45, 52, 64),
+        info=_c(92, 193, 255),
+        gradient_start=_c(24, 27, 35),
+        gradient_end=_c(36, 42, 56),
     ),
     "light": ThemeSpec(
         name="Light",
@@ -128,6 +154,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(255, 255, 255),
         surface_sunken=_c(234, 238, 244),
         header_bg=_c(255, 255, 255),
+        surface_overlay=_c(246, 249, 252, 220),
+        interactive_hover=_c(230, 236, 245),
+        interactive_active=_c(218, 226, 238),
+        interactive_muted=_c(200, 208, 220),
+        info=_c(41, 121, 255),
+        gradient_start=_c(255, 255, 255),
+        gradient_end=_c(240, 243, 248),
     ),
     "neubrutalism": ThemeSpec(
         name="Neubrutalism",
@@ -156,6 +189,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(255, 255, 255),
         surface_sunken=_c(238, 238, 238),
         header_bg=_c(255, 255, 255),
+        surface_overlay=_c(247, 247, 247, 230),
+        interactive_hover=_c(255, 240, 150),
+        interactive_active=_c(245, 230, 130),
+        interactive_muted=_c(220, 220, 220),
+        info=_c(72, 133, 237),
+        gradient_start=_c(255, 255, 255),
+        gradient_end=_c(247, 247, 247),
     ),
     "neumorphism": ThemeSpec(
         name="Neumorphism",
@@ -184,6 +224,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(240, 245, 252),
         surface_sunken=_c(215, 220, 228),
         header_bg=_c(230, 235, 243),
+        surface_overlay=_c(228, 233, 241, 210),
+        interactive_hover=_c(215, 222, 234),
+        interactive_active=_c(205, 213, 225),
+        interactive_muted=_c(195, 202, 215),
+        info=_c(126, 87, 194),
+        gradient_start=_c(230, 235, 243),
+        gradient_end=_c(220, 226, 235),
     ),
     "glassmorphism": ThemeSpec(
         name="Glassmorphism",
@@ -212,6 +259,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(38, 54, 80, 220),
         surface_sunken=_c(10, 14, 24),
         header_bg=_c(16, 22, 36, 220),
+        surface_overlay=_c(12, 18, 30, 210),
+        interactive_hover=_c(40, 60, 90, 180),
+        interactive_active=_c(50, 70, 100, 200),
+        interactive_muted=_c(30, 44, 66, 160),
+        info=_c(92, 193, 255),
+        gradient_start=_c(16, 22, 36),
+        gradient_end=_c(24, 36, 56),
     ),
     "high_contrast": ThemeSpec(
         name="High Contrast",
@@ -240,6 +294,13 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_raised=_c(30, 30, 30),
         surface_sunken=_c(0, 0, 0),
         header_bg=_c(0, 0, 0),
+        surface_overlay=_c(0, 0, 0, 240),
+        interactive_hover=_c(40, 40, 40),
+        interactive_active=_c(60, 60, 60),
+        interactive_muted=_c(30, 30, 30),
+        info=_c(0, 255, 255),
+        gradient_start=_c(0, 0, 0),
+        gradient_end=_c(20, 20, 20),
         # Larger focus indicators for accessibility
         radius_sm=4,
         radius_md=6,
@@ -417,6 +478,17 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
         border-top: 5px solid {theme.text_muted.name()};
+    }}
+    QPushButton:focus, QToolButton:focus {{
+        border: 2px solid {theme.focus.name(QColor.HexArgb)};
+        outline: none;
+    }}
+    QListWidget:focus {{
+        border: 1px solid {theme.focus.name(QColor.HexArgb)};
+        outline: none;
+    }}
+    QTabBar::tab:focus {{
+        border-bottom: 2px solid {theme.focus.name(QColor.HexArgb)};
     }}
     """
     app.setStyleSheet(css)
@@ -657,3 +729,29 @@ def sidebar_item_style(theme: ThemeSpec) -> str:
             background: {theme.surface_alt.name(QColor.HexArgb)};
         }}
     """
+
+
+def collapsible_header_style(theme: ThemeSpec) -> str:
+    """Style for collapsible section headers with toggle indicator."""
+    return (
+        f"QPushButton {{ "
+        f"color: {theme.text_muted.name()}; "
+        f"font-size: 10px; font-weight: 700; "
+        f"letter-spacing: 1px; "
+        f"text-align: left; "
+        f"padding: {theme.spacing_sm}px {theme.spacing_sm}px {theme.spacing_xs}px; "
+        f"border: none; background: transparent; "
+        f"}} "
+        f"QPushButton:hover {{ color: {theme.text.name()}; }}"
+    )
+
+
+def gradient_header_style(theme: ThemeSpec) -> str:
+    """Style using gradient colors for header backgrounds."""
+    gs = theme.gradient_start or theme.header_bg or theme.surface
+    ge = theme.gradient_end or theme.surface_alt
+    return (
+        f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+        f"stop:0 {gs.name(QColor.HexArgb)}, stop:1 {ge.name(QColor.HexArgb)}); "
+        f"border-bottom: 1px solid {theme.outline.name(QColor.HexArgb)};"
+    )

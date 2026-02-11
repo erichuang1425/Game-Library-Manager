@@ -23,7 +23,7 @@ from app.ui.widgets import (
 )
 from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.theme import (
-    apply_theme, current_theme, header_bar_style,
+    apply_theme, current_theme, header_bar_style, gradient_header_style,
     primary_btn_style, secondary_btn_style, ghost_btn_style,
 )
 from app.ui.icons import AppIcons
@@ -214,7 +214,7 @@ class MainWindow(
         header = QFrame()
         header.setFixedHeight(theme.toolbar_height)
         header.setStyleSheet(
-            f"QFrame {{ {header_bar_style(theme)} }}"
+            f"QFrame {{ {gradient_header_style(theme)} }}"
             f"QFrame QLabel {{ background: transparent; border: none; }}"
             f"QFrame QLineEdit {{ background: transparent; border: none; }}"
         )
