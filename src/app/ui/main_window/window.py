@@ -5,10 +5,10 @@ import os
 import time
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
-    QPushButton, QSplitter, QMenu, QToolButton, QApplication,
+    QPushButton, QSplitter, QMenu, QToolButton, QApplication, QFrame,
 )
 
 from app.models import Game, Collection
@@ -22,7 +22,11 @@ from app.ui.widgets import (
     HealthChecksWidget, UpdatesWidget,
 )
 from app.ui.widgets.library_sidebar import LibrarySidebar
-from app.ui.theme import apply_theme
+from app.ui.theme import (
+    apply_theme, current_theme, header_bar_style,
+    primary_btn_style, secondary_btn_style, ghost_btn_style,
+)
+from app.ui.icons import AppIcons
 
 # Import all mixins
 from .scan_mixin import ScanMixin
@@ -63,7 +67,6 @@ class MainWindow(
         self._t0 = time.perf_counter()
         self._log.info("startup_init %s", kv(ts=time.strftime('%H:%M:%S')))
 
-        # ensure startup overlay attrs exist before any status updates
         self._startup_overlay = None
         self._startup_status = None
         self._first_render_done = False
@@ -107,18 +110,16 @@ class MainWindow(
             kv(count=len(self._all_games), collections=len(self._collections),
                duration_ms=round((time.perf_counter() - lib_start) * 1000, 1)),
         )
-        self._set_startup_status("Building UI…")
+        self._set_startup_status("Building UI\u2026")
         self._log.info("data_paths %s", kv(library=library_json_path(), settings=settings_json_path()))
 
         self._filtered: List[Game] = list(self._all_games)
         self._selected_game_id: Optional[str] = None
         self._ignored_health: dict[str, set[str]] = {}
 
-        # Restore custom theme if saved
         if self._theme == "custom" and "custom_theme" in self._settings:
             self._restore_custom_theme()
 
-        # Apply theme + font early so widgets pick them up
         apply_theme(QApplication.instance(), self._theme, self._font_family, self._font_scale)
 
         # Worker handles
@@ -137,41 +138,50 @@ class MainWindow(
             kv(duration_ms=round((time.perf_counter() - ui_build_start) * 1000, 1)),
         )
 
-        # Initial render
         self._finalize_startup()
-
-        # Setup keyboard shortcuts
         self._setup_shortcuts()
 
+    # ------------------------------------------------------------------ #
+    #  Layout
+    # ------------------------------------------------------------------ #
+
     def _build_ui(self) -> None:
-        """Build the main UI layout."""
+        """Build the redesigned main UI layout."""
+        theme = current_theme()
         root = QWidget()
         self.setCentralWidget(root)
 
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(10)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
         # Startup overlay
         self._build_startup_overlay(root)
-        self._set_startup_status("Loading library…")
+        self._set_startup_status("Loading library\u2026")
 
-        # Top bar
-        self._build_topbar(outer)
+        # -- Header bar (slim, branded) --
+        self._build_header_bar(outer, theme)
 
-        # Main split: sidebar | content | details
+        # -- Main body: sidebar | content | details --
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(1)
+        splitter.setStyleSheet(
+            f"QSplitter::handle {{ background: {theme.outline.name(QColor.HexArgb)}; }}"
+        )
 
-        # Left sidebar
         self.sidebar = LibrarySidebar()
         self.sidebar.nav_changed.connect(wrap_slot(self._log, "nav_changed")(self._on_nav_changed))
+        self.sidebar.new_collection_requested.connect(self._new_collection)
+        self.sidebar.rename_collection_requested.connect(self._rename_collection_by_id)
+        self.sidebar.delete_collection_requested.connect(self._delete_collection_by_id)
         self.sidebar.set_games(self._all_games)
 
-        # Center content
-        content = self._build_content_area()
-
-        # Right details panel
-        details = self._build_details_panel()
+        content = self._build_content_area(theme)
+        details = self._build_details_panel(theme)
 
         splitter.addWidget(self.sidebar)
         splitter.addWidget(content)
@@ -179,15 +189,18 @@ class MainWindow(
         self._details_widget = details
         self._splitter = splitter
 
-        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 4)
-        splitter.setStretchFactor(2, 2)
+        splitter.setStretchFactor(2, 0)
         splitter.splitterMoved.connect(self._on_splitter_moved)
         splitter.setChildrenCollapsible(False)
 
         self._type_scale_bucket = "normal"
 
         outer.addWidget(splitter, 1)
+
+        # -- Footer status bar --
+        self._build_footer_bar(outer, theme)
 
         # Restore splitter sizes
         sizes = self._settings.get("splitter_sizes")
@@ -196,101 +209,83 @@ class MainWindow(
         else:
             splitter.setSizes([220, 820, 0 if not self._details_visible else 340])
 
-    def _build_topbar(self, outer: QVBoxLayout) -> None:
-        """Build the top toolbar."""
-        topbar = QHBoxLayout()
+    def _build_header_bar(self, outer: QVBoxLayout, theme) -> None:
+        """Build the slim branded header bar."""
+        header = QFrame()
+        header.setFixedHeight(theme.toolbar_height)
+        header.setStyleSheet(
+            f"QFrame {{ {header_bar_style(theme)} }}"
+            f"QFrame QLabel {{ background: transparent; border: none; }}"
+            f"QFrame QLineEdit {{ background: transparent; border: none; }}"
+        )
 
-        self.title_label = QLabel("Library")
-        self.title_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        hbox = QHBoxLayout(header)
+        hbox.setContentsMargins(theme.spacing_lg, 0, theme.spacing_lg, 0)
+        hbox.setSpacing(theme.spacing_md)
 
+        # App title
+        self.title_label = QLabel(f"{AppIcons.NAV_LIBRARY}  Game Library Manager")
+        self.title_label.setStyleSheet(
+            f"font-size: 14px; font-weight: 700; color: {theme.text.name()};"
+        )
+        hbox.addWidget(self.title_label)
+        hbox.addStretch(1)
+
+        # Search bar (centered, pill-shaped)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search games, tags, notes…")
+        self.search.setPlaceholderText(f" {AppIcons.ACT_SEARCH}  Search games, tags, notes\u2026")
         self.search.setToolTip(
             "Search by title, tags, or notes.\n"
-            "Advanced syntax: status:playing, tag:rpg, rating:>7, has:source"
+            "Advanced: status:playing, tag:rpg, rating:>7, has:source"
         )
         self.search.setClearButtonEnabled(True)
-        self.search.setMinimumWidth(350)
+        self.search.setMinimumWidth(300)
+        self.search.setMaximumWidth(500)
+        self.search.setStyleSheet(
+            f"QLineEdit {{ "
+            f"background: {theme.surface_sunken.name(QColor.HexArgb)}; "
+            f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+            f"border-radius: {theme.radius_pill}px; "
+            f"padding: 5px 16px; "
+            f"color: {theme.text.name()}; "
+            f"font-size: 12px; "
+            f"}} "
+            f"QLineEdit:focus {{ "
+            f"border-color: {theme.accent.name()}; "
+            f"background: {theme.surface.name(QColor.HexArgb)}; "
+            f"}}"
+        )
         self.search.textChanged.connect(self._apply_search)
+        hbox.addWidget(self.search, 2)
+        hbox.addStretch(1)
 
-        self.scan_btn = QPushButton("Scan")
-        self.scan_btn.setMinimumWidth(72)
-        self.scan_btn.setToolTip("Scan shortcuts root")
-        self.scan_btn.clicked.connect(self._on_scan_clicked)
+        # Right-side buttons (ghost style)
+        self._build_tools_menu(theme)
+        hbox.addWidget(self.tools_btn)
 
-        self.check_updates_btn = QToolButton()
-        self.check_updates_btn.setText("Check Updates")
-        self.check_updates_btn.setPopupMode(QToolButton.MenuButtonPopup)
-        self.check_updates_btn.setMinimumWidth(120)
-        self.check_updates_btn.setToolTip("Check updates or open sources")
-        self.check_updates_btn.clicked.connect(self._on_check_updates_fetch)
-        updates_menu = QMenu(self)
-        act_fetch = QAction("Background fetch & parse", self)
-        act_open = QAction("Open sources only", self)
-        act_fetch.triggered.connect(self._on_check_updates_fetch)
-        act_open.triggered.connect(self._on_check_updates_open_only)
-        updates_menu.addAction(act_fetch)
-        updates_menu.addAction(act_open)
-        self.check_updates_btn.setMenu(updates_menu)
+        outer.addWidget(header)
 
-        self._build_tools_menu()
-
-        self.new_collection_btn = QPushButton("New Collection")
-        self.new_collection_btn.setMinimumWidth(120)
-        self.new_collection_btn.setToolTip("Create a collection")
-        self.new_collection_btn.clicked.connect(self._new_collection)
-
-        self.add_to_collection_btn = QPushButton("Add to Collection")
-        self.add_to_collection_btn.setMinimumWidth(130)
-        self.add_to_collection_btn.setToolTip("Add selected game to collection")
-        self.add_to_collection_btn.clicked.connect(self._add_selected_to_collection)
-        self.add_to_collection_btn.setEnabled(False)
-
-        self.rename_collection_btn = QPushButton("Rename Collection")
-        self.rename_collection_btn.setMinimumWidth(130)
-        self.rename_collection_btn.setToolTip("Rename selected collection")
-        self.rename_collection_btn.clicked.connect(self._rename_active_collection)
-        self.rename_collection_btn.setEnabled(False)
-
-        self.delete_collection_btn = QPushButton("Delete Collection")
-        self.delete_collection_btn.setMinimumWidth(120)
-        self.delete_collection_btn.setToolTip("Delete selected collection")
-        self.delete_collection_btn.clicked.connect(self._delete_active_collection)
-        self.delete_collection_btn.setEnabled(False)
-
-        topbar.addWidget(self.title_label)
-        topbar.addStretch(1)
-        topbar.addWidget(self.search)
-        topbar.addWidget(self.scan_btn)
-        topbar.addWidget(self.check_updates_btn)
-        topbar.addWidget(self.tools_btn)
-        topbar.addWidget(self.new_collection_btn)
-        topbar.addWidget(self.add_to_collection_btn)
-        topbar.addWidget(self.rename_collection_btn)
-        topbar.addWidget(self.delete_collection_btn)
-        outer.addLayout(topbar)
-
-    def _build_tools_menu(self) -> None:
+    def _build_tools_menu(self, theme) -> None:
         """Build the tools dropdown menu."""
         tools_menu = QMenu(self)
-        act_bulk = QAction("Bulk Source URLs…", self)
+        act_bulk = QAction("Bulk Source URLs\u2026", self)
         act_bulk.triggered.connect(self._open_bulk_sources)
-        act_bulk_archive = QAction("Bulk Archive Import…", self)
+        act_bulk_archive = QAction("Bulk Archive Import\u2026", self)
         act_bulk_archive.triggered.connect(self._open_bulk_archive_import)
         act_scan = QAction("Scanner", self)
         act_scan.triggered.connect(self._open_scanner_project)
-        act_settings = QAction("Settings", self)
-        act_settings.triggered.connect(self._open_preferences)
-        act_theme_editor = QAction("Theme Editor…", self)
-        act_theme_editor.triggered.connect(self._open_theme_editor)
-        act_layout = QAction("Layout Customization…", self)
-        act_layout.triggered.connect(self._open_layout_customization)
-        act_data = QAction("Open Data Folder", self)
-        act_data.triggered.connect(self._open_data_folder)
         tools_menu.addAction(act_bulk)
         tools_menu.addAction(act_bulk_archive)
         tools_menu.addAction(act_scan)
         tools_menu.addSeparator()
+        act_settings = QAction(f"{AppIcons.ACT_SETTINGS}  Settings", self)
+        act_settings.triggered.connect(self._open_preferences)
+        act_theme_editor = QAction("Theme Editor\u2026", self)
+        act_theme_editor.triggered.connect(self._open_theme_editor)
+        act_layout = QAction("Layout Customization\u2026", self)
+        act_layout.triggered.connect(self._open_layout_customization)
+        act_data = QAction("Open Data Folder", self)
+        act_data.triggered.connect(self._open_data_folder)
         tools_menu.addAction(act_settings)
         tools_menu.addAction(act_theme_editor)
         tools_menu.addAction(act_layout)
@@ -298,25 +293,194 @@ class MainWindow(
         tools_menu.addAction(act_data)
 
         self.tools_btn = QToolButton()
-        self.tools_btn.setText("Tools")
-        self.tools_btn.setMinimumWidth(80)
+        self.tools_btn.setText(f"{AppIcons.NAV_TOOLS}")
         self.tools_btn.setToolTip("Tools and settings")
         self.tools_btn.setPopupMode(QToolButton.InstantPopup)
         self.tools_btn.setMenu(tools_menu)
+        self.tools_btn.setStyleSheet(
+            ghost_btn_style(theme) +
+            f" QToolButton {{ font-size: 16px; padding: 4px 8px; min-width: 32px; }}"
+        )
 
-    def _build_content_area(self) -> QWidget:
-        """Build the center content area with grid and controls."""
+    def _build_content_area(self, theme) -> QWidget:
+        """Build the center content area with context toolbar and grid."""
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(8)
-        content.setMinimumWidth(520)
+        content_layout.setContentsMargins(theme.spacing_md, 0, theme.spacing_md, 0)
+        content_layout.setSpacing(0)
+        content.setMinimumWidth(480)
 
-        self.content_title = QLabel("All Games")
-        self.content_title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        # -- Context toolbar --
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, theme.spacing_sm, 0, theme.spacing_sm)
+        toolbar.setSpacing(theme.spacing_sm)
 
-        # Filter / controls bar
-        controls = self._build_controls_bar()
+        # Primary actions
+        self.scan_btn = QPushButton(f"{AppIcons.ACT_SCAN}  Scan")
+        self.scan_btn.setStyleSheet(primary_btn_style(theme))
+        self.scan_btn.setCursor(Qt.PointingHandCursor)
+        self.scan_btn.setToolTip("Scan shortcuts root folder")
+        self.scan_btn.clicked.connect(self._on_scan_clicked)
+        toolbar.addWidget(self.scan_btn)
+
+        self.check_updates_btn = QToolButton()
+        self.check_updates_btn.setText(f"{AppIcons.NAV_UPDATES}  Updates")
+        self.check_updates_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        self.check_updates_btn.setStyleSheet(secondary_btn_style(theme))
+        self.check_updates_btn.setCursor(Qt.PointingHandCursor)
+        self.check_updates_btn.setToolTip("Check for game updates")
+        self.check_updates_btn.clicked.connect(self._on_check_updates_fetch)
+        updates_menu = QMenu(self)
+        act_fetch = QAction("Background fetch && parse", self)
+        act_open = QAction("Open sources only", self)
+        act_fetch.triggered.connect(self._on_check_updates_fetch)
+        act_open.triggered.connect(self._on_check_updates_open_only)
+        updates_menu.addAction(act_fetch)
+        updates_menu.addAction(act_open)
+        self.check_updates_btn.setMenu(updates_menu)
+        toolbar.addWidget(self.check_updates_btn)
+
+        # Separator
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.VLine)
+        sep1.setStyleSheet(f"color: {theme.outline.name(QColor.HexArgb)};")
+        sep1.setFixedWidth(1)
+        toolbar.addWidget(sep1)
+
+        # Quick filter pills
+        self.pill_all = QPushButton("All")
+        self.pill_all.setToolTip("Show all games")
+        self.pill_missing = QPushButton("Missing")
+        self.pill_missing.setToolTip("Games with missing shortcuts")
+        self.pill_updates = QPushButton("Updates")
+        self.pill_updates.setToolTip("Games with available updates")
+        self.pill_source = QPushButton("Source")
+        self.pill_source.setToolTip("Games with a source URL")
+        for btn in (self.pill_all, self.pill_missing, self.pill_updates, self.pill_source):
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(self._on_quick_filter)
+            toolbar.addWidget(btn)
+
+        toolbar.addStretch(1)
+
+        # View controls (compact)
+        # Sort
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(["Title", "Last Played", "Rating", "Launch Count", "Last Checked"])
+        self.sort_combo.setToolTip("Sort order")
+        self.sort_combo.setCurrentText({
+            "title": "Title",
+            "last_played": "Last Played",
+            "rating": "Rating",
+            "launch_count": "Launch Count",
+            "last_checked": "Last Checked"
+        }.get(self._sort_by, "Title"))
+        self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
+        self.sort_combo.setMaximumWidth(120)
+        toolbar.addWidget(self.sort_combo)
+
+        # View toggle
+        self.view_comfort = QPushButton("Grid")
+        self.view_comfort.setToolTip("Comfortable grid view")
+        self.view_compact = QPushButton("List")
+        self.view_compact.setToolTip("Compact list view")
+        for btn in (self.view_comfort, self.view_compact):
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(self._on_view_mode_changed)
+            btn.setMaximumWidth(60)
+        toolbar.addWidget(self.view_comfort)
+        toolbar.addWidget(self.view_compact)
+
+        content_layout.addLayout(toolbar)
+
+        # -- Secondary controls (hidden filters) --
+        filter_row = QHBoxLayout()
+        filter_row.setContentsMargins(0, 0, 0, theme.spacing_xs)
+        filter_row.setSpacing(theme.spacing_sm)
+
+        # Tag filter display
+        self.tag_filter_label = QLabel("")
+        self.tag_filter_label.setStyleSheet(
+            f"color: {theme.accent.name()}; font-weight: 600; "
+            f"background: transparent; border: none;"
+        )
+        self.tag_filter_label.hide()
+        self.clear_tag_btn = QPushButton(AppIcons.ACT_CLOSE)
+        self.clear_tag_btn.setStyleSheet(ghost_btn_style(theme))
+        self.clear_tag_btn.setFixedSize(24, 24)
+        self.clear_tag_btn.clicked.connect(self._clear_tag_filter)
+        self.clear_tag_btn.setVisible(False)
+        filter_row.addWidget(self.tag_filter_label)
+        filter_row.addWidget(self.clear_tag_btn)
+
+        # Dropdown filters (compact)
+        self.status_filter = QComboBox()
+        self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
+        self.status_filter.setToolTip("Filter by status")
+        status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
+        self.status_filter.setCurrentText(status_label)
+        self.status_filter.currentTextChanged.connect(self._on_filter_changed)
+        self.status_filter.setMaximumWidth(100)
+        st_lbl = QLabel("Status")
+        st_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
+        filter_row.addWidget(st_lbl)
+        filter_row.addWidget(self.status_filter)
+
+        self.conf_filter = QComboBox()
+        self.conf_filter.addItems(["All", "High", "Medium", "Low"])
+        self.conf_filter.setToolTip("Filter by confidence")
+        confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
+        self.conf_filter.setCurrentText(confidence_label)
+        self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
+        self.conf_filter.setMaximumWidth(90)
+        cf_lbl = QLabel("Confidence")
+        cf_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
+        filter_row.addWidget(cf_lbl)
+        filter_row.addWidget(self.conf_filter)
+
+        self.type_filter = QComboBox()
+        self.type_filter.addItems(["All", "lnk", "url", "html"])
+        self.type_filter.setToolTip("Filter by type")
+        self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
+        self.type_filter.currentTextChanged.connect(self._on_filter_changed)
+        self.type_filter.setMaximumWidth(70)
+        tp_lbl = QLabel("Type")
+        tp_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
+        filter_row.addWidget(tp_lbl)
+        filter_row.addWidget(self.type_filter)
+
+        filter_row.addStretch(1)
+
+        # Focus + Details + Select buttons
+        self.focus_btn = QPushButton("Focus")
+        self.focus_btn.setToolTip("Full-width grid")
+        self.focus_btn.setCheckable(True)
+        self.focus_btn.setCursor(Qt.PointingHandCursor)
+        self.focus_btn.clicked.connect(self._toggle_focus_mode)
+        self.focus_btn.setChecked(self._focus_mode)
+        self.focus_btn.setStyleSheet(ghost_btn_style(theme))
+        filter_row.addWidget(self.focus_btn)
+
+        self.details_toggle = QToolButton()
+        self.details_toggle.setText("Details")
+        self.details_toggle.setToolTip("Show/hide details panel")
+        self.details_toggle.setCheckable(True)
+        self.details_toggle.setChecked(self._details_visible)
+        self.details_toggle.clicked.connect(self._toggle_details_panel)
+        self.details_toggle.setStyleSheet(ghost_btn_style(theme))
+        filter_row.addWidget(self.details_toggle)
+
+        self.select_btn = QPushButton("Select")
+        self.select_btn.setToolTip("Multi-select mode")
+        self.select_btn.setCheckable(True)
+        self.select_btn.setCursor(Qt.PointingHandCursor)
+        self.select_btn.clicked.connect(self._toggle_multi_select_mode)
+        self.select_btn.setStyleSheet(ghost_btn_style(theme))
+        filter_row.addWidget(self.select_btn)
+
+        content_layout.addLayout(filter_row)
 
         # Filter chips bar
         self.filter_chips = FilterChipsBar()
@@ -333,6 +497,14 @@ class MainWindow(
         self.batch_toolbar.clear_selection_clicked.connect(lambda: self.grid.clear_selection())
         self.batch_toolbar.exit_mode_clicked.connect(self._exit_multi_select_mode)
         content_layout.addWidget(self.batch_toolbar)
+
+        # Content title (shows current view name)
+        self.content_title = QLabel("All Games")
+        self.content_title.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {theme.text.name()}; "
+            f"padding: {theme.spacing_xs}px 0; background: transparent; border: none;"
+        )
+        content_layout.addWidget(self.content_title)
 
         # Game grid
         self.grid = GameGrid()
@@ -358,11 +530,8 @@ class MainWindow(
         self.updates.open_source_requested.connect(self._open_source_for_game)
         self.updates.mark_installed_requested.connect(self._mark_installed_from_source)
 
-        # Apply saved preferences
         self._apply_saved_widget_prefs()
 
-        content_layout.addWidget(self.content_title)
-        content_layout.addLayout(controls)
         content_layout.addWidget(self.grid, 1)
         content_layout.addWidget(self.health, 1)
         content_layout.addWidget(self.updates, 1)
@@ -370,6 +539,17 @@ class MainWindow(
         self.updates.hide()
 
         self._rebuild_sidebar()
+
+        # Keep hidden collection buttons for backward compatibility with mixins
+        self.new_collection_btn = QPushButton()
+        self.new_collection_btn.hide()
+        self.add_to_collection_btn = QPushButton()
+        self.add_to_collection_btn.hide()
+        self.rename_collection_btn = QPushButton()
+        self.rename_collection_btn.hide()
+        self.delete_collection_btn = QPushButton()
+        self.delete_collection_btn.hide()
+
         return content
 
     def _apply_saved_widget_prefs(self) -> None:
@@ -398,135 +578,75 @@ class MainWindow(
                     self.health.filter_missing_source, self.health.filter_missing_archive):
             btn.clicked.connect(self._save_health_prefs)
 
-    def _build_controls_bar(self) -> QHBoxLayout:
-        """Build the filter controls bar."""
-        controls = QHBoxLayout()
-        controls.setSpacing(8)
-
-        # Quick pills
-        self.pill_all = QPushButton("All")
-        self.pill_all.setToolTip("Show all games in your library")
-        self.pill_missing = QPushButton("Missing")
-        self.pill_missing.setToolTip("Show games with missing shortcut files")
-        self.pill_updates = QPushButton("Updates")
-        self.pill_updates.setToolTip("Show games with available updates")
-        self.pill_source = QPushButton("Source")
-        self.pill_source.setToolTip("Show games with a source URL")
-        for btn in (self.pill_all, self.pill_missing, self.pill_updates, self.pill_source):
-            btn.setCheckable(True)
-            btn.clicked.connect(self._on_quick_filter)
-            controls.addWidget(btn)
-        controls.addSpacing(12)
-
-        # Tag filter display
-        self.tag_filter_label = QLabel("")
-        self.tag_filter_label.setStyleSheet("color: #7ca1ff; font-weight: 600;")
-        self.tag_filter_label.hide()
-        self.clear_tag_btn = QPushButton("Clear tag")
-        self.clear_tag_btn.clicked.connect(self._clear_tag_filter)
-        self.clear_tag_btn.setVisible(False)
-        controls.addWidget(self.tag_filter_label)
-        controls.addWidget(self.clear_tag_btn)
-
-        # Dropdown filters
-        self.status_filter = QComboBox()
-        self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
-        self.status_filter.setToolTip("Filter by game play status")
-        status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
-        self.status_filter.setCurrentText(status_label)
-        self.status_filter.currentTextChanged.connect(self._on_filter_changed)
-        controls.addWidget(QLabel("Status:"))
-        controls.addWidget(self.status_filter)
-
-        self.conf_filter = QComboBox()
-        self.conf_filter.addItems(["All", "High", "Medium", "Low"])
-        self.conf_filter.setToolTip("Filter by metadata confidence level")
-        confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
-        self.conf_filter.setCurrentText(confidence_label)
-        self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
-        controls.addWidget(QLabel("Confidence:"))
-        controls.addWidget(self.conf_filter)
-
-        self.type_filter = QComboBox()
-        self.type_filter.addItems(["All", "lnk", "url", "html"])
-        self.type_filter.setToolTip("Filter by shortcut file type")
-        self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
-        self.type_filter.currentTextChanged.connect(self._on_filter_changed)
-        controls.addWidget(QLabel("Type:"))
-        controls.addWidget(self.type_filter)
-
-        # Sort
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems(["Title", "Last Played", "Rating", "Launch Count", "Last Checked"])
-        self.sort_combo.setToolTip("Change how games are sorted in the grid")
-        self.sort_combo.setCurrentText({
-            "title": "Title",
-            "last_played": "Last Played",
-            "rating": "Rating",
-            "launch_count": "Launch Count",
-            "last_checked": "Last Checked"
-        }.get(self._sort_by, "Title"))
-        self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
-        controls.addWidget(QLabel("Sort:"))
-        controls.addWidget(self.sort_combo)
-
-        # View toggle
-        self.view_comfort = QPushButton("Comfortable")
-        self.view_comfort.setToolTip("Larger cards with more details (200px height)")
-        self.view_compact = QPushButton("Compact")
-        self.view_compact.setToolTip("Smaller cards to see more games (150px height)")
-        for btn in (self.view_comfort, self.view_compact):
-            btn.setCheckable(True)
-            btn.clicked.connect(self._on_view_mode_changed)
-        controls.addWidget(self.view_comfort)
-        controls.addWidget(self.view_compact)
-
-        # Focus mode
-        self.focus_btn = QPushButton("Focus")
-        self.focus_btn.setToolTip("Hide side panels for full-width game grid")
-        self.focus_btn.setCheckable(True)
-        self.focus_btn.clicked.connect(self._toggle_focus_mode)
-        self.focus_btn.setChecked(self._focus_mode)
-        controls.addWidget(self.focus_btn)
-
-        # Details toggle
-        self.details_toggle = QToolButton()
-        self.details_toggle.setText("Details")
-        self.details_toggle.setToolTip("Show/hide the game details panel")
-        self.details_toggle.setCheckable(True)
-        self.details_toggle.setChecked(self._details_visible)
-        self.details_toggle.clicked.connect(self._toggle_details_panel)
-        controls.addWidget(self.details_toggle)
-
-        # Multi-select mode
-        self.select_btn = QPushButton("Select")
-        self.select_btn.setToolTip("Enable multi-select mode (Ctrl+Click to select multiple games)")
-        self.select_btn.setCheckable(True)
-        self.select_btn.clicked.connect(self._toggle_multi_select_mode)
-        controls.addWidget(self.select_btn)
-
-        controls.addStretch(1)
-        return controls
-
-    def _build_details_panel(self) -> QWidget:
+    def _build_details_panel(self, theme) -> QWidget:
         """Build the right details panel."""
         details = QWidget()
         details_layout = QVBoxLayout(details)
-        details_layout.setContentsMargins(0, 0, 0, 0)
-        details_layout.setSpacing(8)
-        details.setMinimumWidth(320)
-        details.setMaximumWidth(520)
-
-        details_title = QLabel("Details")
-        details_title.setStyleSheet("font-size: 14px; font-weight: 600;")
+        details_layout.setContentsMargins(theme.spacing_md, theme.spacing_sm, theme.spacing_md, theme.spacing_sm)
+        details_layout.setSpacing(0)
+        details.setMinimumWidth(theme.details_width_min)
+        details.setMaximumWidth(theme.details_width_max)
 
         self.details = DetailsPanel()
         self.details.play_clicked.connect(self._on_game_play)
         self.details.game_changed.connect(self._on_game_changed)
 
-        details_layout.addWidget(details_title)
         details_layout.addWidget(self.details, 1)
         return details
+
+    def _build_footer_bar(self, outer: QVBoxLayout, theme) -> None:
+        """Build the custom status/footer bar."""
+        footer = QFrame()
+        footer.setFixedHeight(28)
+        footer.setStyleSheet(
+            f"QFrame {{ "
+            f"background: {theme.surface.name(QColor.HexArgb)}; "
+            f"border-top: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+            f"}} "
+            f"QFrame QLabel {{ background: transparent; border: none; font-size: 11px; }}"
+        )
+        hbox = QHBoxLayout(footer)
+        hbox.setContentsMargins(theme.spacing_lg, 0, theme.spacing_lg, 0)
+        hbox.setSpacing(theme.spacing_lg)
+
+        self._footer_count = QLabel("")
+        self._footer_count.setStyleSheet(f"color: {theme.text_muted.name()};")
+        hbox.addWidget(self._footer_count)
+
+        self._footer_filters = QLabel("")
+        self._footer_filters.setStyleSheet(f"color: {theme.text_muted.name()};")
+        hbox.addWidget(self._footer_filters)
+
+        hbox.addStretch(1)
+
+        self._footer_theme = QLabel(f"Theme: {self._theme.title()}")
+        self._footer_theme.setStyleSheet(f"color: {theme.text_muted.name()};")
+        hbox.addWidget(self._footer_theme)
+
+        outer.addWidget(footer)
+
+    def update_footer(self) -> None:
+        """Update footer bar with current counts and filter info."""
+        total = len(self._all_games)
+        shown = len(self._filtered)
+        if total == shown:
+            self._footer_count.setText(f"{total} games")
+        else:
+            self._footer_count.setText(f"{shown} of {total} games")
+
+        # Active filter summary
+        parts = []
+        if self._status_filter != "all":
+            parts.append(f"Status: {self._status_filter}")
+        if self._tag_filter:
+            parts.append(f"Tag: {self._tag_filter}")
+        if self._quick_filter != "all":
+            parts.append(f"View: {self._quick_filter}")
+        self._footer_filters.setText("  |  ".join(parts) if parts else "")
+
+    # ------------------------------------------------------------------ #
+    #  Startup / Lifecycle
+    # ------------------------------------------------------------------ #
 
     def _finalize_startup(self) -> None:
         """Finalize startup: apply modes, render, show status."""
@@ -551,7 +671,7 @@ class MainWindow(
         if not self._all_games:
             self.statusBar().showMessage("Tip: Click Scan to choose your games root folder.", 8000)
         else:
-            self.statusBar().showMessage(f"Loaded {len(self._all_games)} games from library.json", 5000)
+            self.statusBar().showMessage(f"Loaded {len(self._all_games)} games", 5000)
         self._log.info(
             "startup_first_render_done %s",
             kv(duration_ms=round((time.perf_counter() - first_render_start) * 1000, 1),
@@ -566,11 +686,19 @@ class MainWindow(
         if self._log_rate.allow("resize", interval_ms=300):
             self._log.debug("resize %s", kv(w=self.width(), h=self.height()))
 
-    # Stub methods that may be referenced by undo/redo but not fully implemented
     def _persist_library(self) -> None:
-        """Persist library (alias for _save_bundle)."""
         self._save_bundle()
 
     def _refresh_list(self) -> None:
-        """Refresh list (alias for _apply_search)."""
         self._apply_search()
+
+    # Compatibility stubs for collection management via sidebar signals
+    def _rename_collection_by_id(self, coll_id: str) -> None:
+        """Rename a collection by ID (called from sidebar context menu)."""
+        self._active_collection_id = coll_id
+        self._rename_active_collection()
+
+    def _delete_collection_by_id(self, coll_id: str) -> None:
+        """Delete a collection by ID (called from sidebar context menu)."""
+        self._active_collection_id = coll_id
+        self._delete_active_collection()

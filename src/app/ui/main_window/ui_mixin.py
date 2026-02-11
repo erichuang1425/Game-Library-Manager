@@ -25,16 +25,17 @@ class UIMixin:
         start = time.perf_counter()
         self._render_count += 1
         self.grid.set_games(self._filtered)
-        self.add_to_collection_btn.setEnabled(self._selected_game_id is not None)
         if self._selected_game_id is not None:
             g = self._get_game(self._selected_game_id)
             self.details.show_game(g)
             self._ensure_details_visible()
         self._apply_quick_filter_buttons()
         self._update_view_mode_buttons()
+        if hasattr(self, 'update_footer'):
+            self.update_footer()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         if self._render_count == 1:
-            self._set_startup_status("Rendering grid…")
+            self._set_startup_status("Rendering grid\u2026")
             self._log.info("main_render_first %s", kv(duration_ms=duration_ms, filtered=len(self._filtered)))
             self._hide_startup_overlay()
         elif self._log_rate.allow("main_render", interval_ms=800):

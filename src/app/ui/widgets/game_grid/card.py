@@ -24,7 +24,8 @@ from PySide6.QtGui import QCursor, QColor, QPixmap
 from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, best_icon_path, extract_dominant_color
 from app.services.version_parser import CompareResult
-from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion
+from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion, status_color
+from app.ui.icons import AppIcons
 from app.logging_utils import get_logger, kv, RateLimiter
 
 from .display_utils import status_label, stars, relative_time
@@ -69,42 +70,42 @@ class GameCard(QFrame):
         theme = self._theme
         pad = theme.spacing_md if view_mode == "comfortable" else theme.spacing_sm
 
-        # Use design token-based card styling
+        # Refined card styling — subtle border, clean background
         self.setStyleSheet(
             f"QFrame {{ {card_style(theme)} }}"
             f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
         )
 
-        # Add subtle drop shadow for depth
+        # Soft drop shadow for depth
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(12)
-        shadow.setOffset(0, 2)
+        shadow.setBlurRadius(16)
+        shadow.setOffset(0, 3)
         shadow.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_low))
         self.setGraphicsEffect(shadow)
         self._shadow_effect = shadow
 
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        # defensive: cards must never become top-level windows
         assert self.parent() is not None, "GameCard requires a parent; prevents floating windows."
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(pad, pad, pad, pad)
-        layout.setSpacing(6 if view_mode == "compact" else 10)
-        self.setMinimumHeight(200 if view_mode == "comfortable" else 150)
+        layout.setSpacing(4 if view_mode == "compact" else 6)
+        self.setMinimumHeight(220 if view_mode == "comfortable" else 160)
 
-        # Build the card UI
+        # Build the card UI: icon, title, always-visible metadata, hover actions
         self._build_icon_area(layout, theme, view_mode, game)
-        self._build_title(layout, theme, view_mode, game)
+        self._build_info_section(layout, theme, view_mode, game)
         self._build_overlay_sheet(layout, theme, game)
 
     def _build_icon_area(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
-        """Build the icon/image area of the card."""
+        """Build the icon/image area with status dot and update indicator."""
         self.icon_frame = QFrame()
         self.icon_frame.setStyleSheet(
-            f"QFrame {{ background:{theme.surface_alt.name(QColor.HexArgb)}; border-radius:12px; }}"
+            f"QFrame {{ background:{theme.surface_alt.name(QColor.HexArgb)}; "
+            f"border-radius:{theme.radius_md}px; border: none; }}"
         )
-        icon_ratio = 0.78 if view_mode == "comfortable" else 0.6
+        icon_ratio = 0.65 if view_mode == "comfortable" else 0.55
         icon_height = int(self.minimumHeight() * icon_ratio)
         self.icon_frame.setMinimumHeight(icon_height)
         icon_layout = QStackedLayout(self.icon_frame)
@@ -119,220 +120,202 @@ class GameCard(QFrame):
         self._set_icon_pixmap(icon_height)
         base_layout.addWidget(self.icon_label)
 
-        # Extract ambient color from icon for dynamic accents
         self._ambient_color: QColor | None = None
         self._extract_ambient_color()
 
+        # Overlay with status dot + selection checkbox
         status_overlay = QWidget()
         status_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
         sw = QHBoxLayout(status_overlay)
-        sw.setContentsMargins(6, 6, 6, 6)
+        sw.setContentsMargins(8, 8, 8, 8)
         sw.setSpacing(4)
 
-        # Selection checkbox (visible in multi-select mode)
-        self._select_checkbox = QLabel("☐")
+        # Selection checkbox (multi-select mode)
+        self._select_checkbox = QLabel("\u2610")
         self._select_checkbox.setFixedSize(22, 22)
         self._select_checkbox.setAlignment(Qt.AlignCenter)
         self._select_checkbox.setStyleSheet(
-            f"background: rgba(0,0,0,0.5); "
-            f"color: white; "
-            f"border-radius: 4px; "
-            f"font-size: 14px; "
-            f"font-weight: bold;"
+            f"background: rgba(0,0,0,0.5); color: white; "
+            f"border-radius: 4px; font-size: 14px; font-weight: bold;"
         )
         self._select_checkbox.setToolTip("Click to select")
-        self._select_checkbox.hide()  # Hidden by default, shown in multi-select mode
+        self._select_checkbox.hide()
         sw.addWidget(self._select_checkbox, 0, Qt.AlignLeft | Qt.AlignTop)
 
-        # Enhanced status badge with icon and subtle styling
-        status_colors = {
-            "backlog": ("#5cc1ff", "○"),   # Light blue, circle
-            "playing": ("#7bed9f", "▶"),   # Green, play icon
-            "finished": ("#ffa94d", "✓"),  # Orange, check
-            "dropped": ("#ef6c00", "✕"),   # Dark orange, x
-        }
-        status_color, status_icon = status_colors.get(game.status, ("#5cc1ff", "○"))
-
-        status_badge = QLabel(status_icon)
-        status_badge.setFixedSize(20, 20)
-        status_badge.setAlignment(Qt.AlignCenter)
-        status_badge.setStyleSheet(
-            f"background: {status_color}; "
-            f"color: rgba(0,0,0,0.7); "
-            f"border-radius: 10px; "
-            f"font-size: 11px; "
-            f"font-weight: bold;"
+        # Status dot (8px colored circle using semantic status colors)
+        sc = status_color(theme, game.status)
+        status_dot = QLabel()
+        status_dot.setFixedSize(10, 10)
+        status_dot.setStyleSheet(
+            f"background: {sc.name()}; border-radius: 5px; border: none;"
         )
-        status_badge.setToolTip(status_label(game.status))
-        sw.addWidget(status_badge, 0, Qt.AlignLeft | Qt.AlignTop)
-        sw.addStretch(1)
-        base_layout.addWidget(status_overlay)
+        status_dot.setToolTip(status_label(game.status))
+        sw.addWidget(status_dot, 0, Qt.AlignLeft | Qt.AlignTop)
 
+        sw.addStretch(1)
+
+        # Update indicator dot (top-right, accent-colored)
+        inst_vi = parse_version(game.installed_version_raw) if game.installed_version_raw else None
+        src_vi = parse_version(game.source_version_raw) if game.source_version_raw else None
+        cmp = compare_versions(inst_vi, src_vi)
+        if game.source_url and cmp in (CompareResult.OLDER, CompareResult.UNKNOWN):
+            update_dot = QLabel()
+            update_dot.setFixedSize(10, 10)
+            update_dot.setStyleSheet(
+                f"background: {theme.accent.name()}; border-radius: 5px; border: none;"
+            )
+            update_dot.setToolTip("Update available" if cmp == CompareResult.OLDER else "Version unknown")
+            sw.addWidget(update_dot, 0, Qt.AlignRight | Qt.AlignTop)
+
+        base_layout.addWidget(status_overlay)
         icon_layout.addWidget(base)
         layout.addWidget(self.icon_frame)
 
-    def _build_title(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
-        """Build the title row."""
-        title = QLabel()
+    def _build_info_section(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
+        """Build the always-visible info section: title, rating + time, tags."""
         scale = {"small": 0.9, "normal": 1.0, "large": 1.1}.get(self.type_scale, 1.0)
-        title_size = int((15 if view_mode == "comfortable" else 13) * scale)
+
+        # Title (bold, 2-line max)
+        title = QLabel()
+        title_size = int((14 if view_mode == "comfortable" else 12) * scale)
         fm = title.fontMetrics()
         title.setWordWrap(True)
         title.setMaximumHeight(fm.lineSpacing() * 2 + 4)
         title.setText(game.title)
         title.setToolTip(game.title)
-        title.setStyleSheet(f"font-size: {title_size}px; font-weight: 650; color: {theme.text.name()};")
+        title.setStyleSheet(
+            f"font-size: {title_size}px; font-weight: 600; "
+            f"color: {theme.text.name()}; background: transparent; border: none;"
+        )
         layout.addWidget(title)
 
+        # Rating + last played (always visible, muted)
+        meta_size = int(10 * scale)
+        rating_text = stars(game.rating)
+        time_text = relative_time(game.last_played)
+
+        meta_parts = [rating_text]
+        if time_text and view_mode == "comfortable":
+            meta_parts.append(time_text)
+        meta_line = "  \u00B7  ".join(meta_parts)
+
+        meta_label = QLabel(meta_line)
+        meta_label.setStyleSheet(
+            f"font-size: {meta_size}px; color: {theme.text_muted.name()}; "
+            f"background: transparent; border: none;"
+        )
+        meta_label.setToolTip(
+            f"Rating: {game.rating or 'unrated'}"
+            + (f"\nLast played: {time_text}" if time_text else "")
+        )
+        layout.addWidget(meta_label)
+
+        # Tag chips (max 2-3, always visible in comfortable mode)
+        if view_mode == "comfortable":
+            tags = game.tags or []
+            if tags:
+                tag_row = QHBoxLayout()
+                tag_row.setContentsMargins(0, 2, 0, 0)
+                tag_row.setSpacing(4)
+                max_tags = 2 if self.chip_level == "narrow" else 3
+                for t in tags[:max_tags]:
+                    tag_lbl = QLabel(t)
+                    tag_lbl.setStyleSheet(
+                        f"font-size: {int(9 * scale)}px; "
+                        f"color: {theme.text_muted.name()}; "
+                        f"background: {theme.chip_bg.name(QColor.HexArgb)}; "
+                        f"border-radius: {theme.radius_sm - 2}px; "
+                        f"padding: 1px 6px; border: none;"
+                    )
+                    tag_lbl.setMaximumWidth(90)
+                    tag_row.addWidget(tag_lbl)
+                if len(tags) > max_tags:
+                    more = QLabel(f"+{len(tags) - max_tags}")
+                    more.setStyleSheet(
+                        f"font-size: {int(9 * scale)}px; color: {theme.text_muted.name()}; "
+                        f"background: transparent; border: none;"
+                    )
+                    tag_row.addWidget(more)
+                tag_row.addStretch(1)
+                layout.addLayout(tag_row)
+
     def _build_overlay_sheet(self, layout: QVBoxLayout, theme, game: Game) -> None:
-        """Build the hover overlay bottom sheet."""
+        """Build the hover overlay — action buttons only (metadata is always visible)."""
         self.overlay_sheet = QFrame()
+        sr = theme.surface_raised or theme.surface_alt
         self.overlay_sheet.setStyleSheet(
-            f"QFrame {{ background: rgba({theme.surface_alt.red()},{theme.surface_alt.green()},{theme.surface_alt.blue()},204); border-radius: 10px; }}"
+            f"QFrame {{ background: rgba({sr.red()},{sr.green()},{sr.blue()},230); "
+            f"border-radius: {theme.radius_sm}px; border: none; }}"
         )
         self.overlay_opacity = QGraphicsOpacityEffect(self.overlay_sheet)
         self.overlay_sheet.setGraphicsEffect(self.overlay_opacity)
         self.overlay_opacity.setOpacity(0.0)
         self.overlay_anim = QPropertyAnimation(self.overlay_opacity, b"opacity", self)
-        self.overlay_anim.setDuration(140)
+        self.overlay_anim.setDuration(120)
         self.overlay_anim.setStartValue(0.0)
         self.overlay_anim.setEndValue(1.0)
         self.overlay_anim.finished.connect(self._on_overlay_anim_finished)
 
-        sheet_layout = QVBoxLayout(self.overlay_sheet)
-        sheet_layout.setContentsMargins(10, 8, 10, 8)
-        sheet_layout.setSpacing(4)
+        sheet_layout = QHBoxLayout(self.overlay_sheet)
+        sheet_layout.setContentsMargins(8, 6, 8, 6)
+        sheet_layout.setSpacing(6)
 
-        # Overlay title
-        overlay_title = QLabel()
-        overlay_title.setWordWrap(False)
-        overlay_title.setToolTip(game.title)
-        overlay_title.setStyleSheet(f"font-weight:650; color:{theme.text.name()};")
-        ot = overlay_title.fontMetrics()
-        overlay_title.setText(ot.elidedText(game.title, Qt.ElideRight, 220))
-        sheet_layout.addWidget(overlay_title)
+        # Action buttons only
+        play_btn = QPushButton(f"{AppIcons.ACT_PLAY} Play")
+        play_btn.setCursor(Qt.PointingHandCursor)
+        play_btn.setStyleSheet(
+            f"QPushButton {{ background: {theme.accent.name()}; color: {theme.bg.name()}; "
+            f"border: none; border-radius: {theme.radius_sm}px; padding: 5px 14px; "
+            f"font-weight: 600; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: {theme.accent.lighter(110).name()}; }}"
+        )
+        play_btn.clicked.connect(lambda: self.play_clicked.emit(self.game.game_id))
+        sheet_layout.addWidget(play_btn)
 
-        # Metadata chips row
-        self._build_metadata_chips(sheet_layout, theme, game)
+        folder_btn = QPushButton(AppIcons.ACT_FOLDER)
+        folder_btn.setCursor(Qt.PointingHandCursor)
+        folder_btn.setToolTip("Open folder")
+        folder_btn.setFixedSize(28, 28)
+        folder_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {theme.text_muted.name()}; "
+            f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+            f"border-radius: {theme.radius_sm}px; font-size: 12px; }}"
+            f"QPushButton:hover {{ color: {theme.text.name()}; "
+            f"background: {theme.surface_alt.name(QColor.HexArgb)}; }}"
+        )
+        folder_btn.clicked.connect(lambda: self.context_action.emit(self.game.game_id, "open_folder"))
+        sheet_layout.addWidget(folder_btn)
 
-        # Tags row
-        self._build_tags_row(sheet_layout, theme, game)
-
-        # Quick action buttons
-        self._build_action_buttons(sheet_layout, game)
+        more_btn = QPushButton(AppIcons.UI_DOTS)
+        more_btn.setCursor(Qt.PointingHandCursor)
+        more_btn.setToolTip("More actions")
+        more_btn.setFixedSize(28, 28)
+        more_btn.setStyleSheet(folder_btn.styleSheet())
+        more_btn.clicked.connect(lambda: self._show_context_menu())
+        sheet_layout.addWidget(more_btn)
 
         sheet_layout.addStretch(1)
-        self.overlay_sheet.setFixedHeight(int(self.minimumHeight() * 0.35))
+
+        self.overlay_sheet.setFixedHeight(40)
         self.overlay_sheet.hide()
         layout.addWidget(self.overlay_sheet)
 
-    def _build_metadata_chips(self, sheet_layout: QVBoxLayout, theme, game: Game) -> None:
-        """Build the metadata chips row."""
-        stype = (game.shortcut_type or "—").upper()
-        meta = QHBoxLayout()
-        meta.setSpacing(6)
-
-        def chip_btn(text: str, color, tooltip: str = "", click=None) -> QPushButton:
-            btn = QPushButton(text)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFlat(True)
-            btn.setFocusPolicy(Qt.NoFocus)
-            btn.setStyleSheet(
-                f"QPushButton {{ {chip_style(theme, color)} }}"
-                f"QPushButton:hover {{ border-color:{theme.focus.name(QColor.HexArgb)}; }}"
-                f"QPushButton:pressed {{ background-color: {theme.focus.name(QColor.HexArgb)}; color:{theme.bg.name(QColor.HexArgb)}; }}"
-            )
-            btn.setToolTip(tooltip or text)
-            if click:
-                btn.clicked.connect(click)
-            return btn
-
-        meta.addWidget(chip_btn(status_label(game.status), theme.chip_bg, "Filter by status",
-                                lambda: self.status_clicked.emit(game.status)))
-        if self.chip_level != "narrow":
-            meta.addWidget(chip_btn(stype, theme.chip_bg.lighter(108), "Shortcut type"))
-
-        scale = {"small": 0.9, "normal": 1.0, "large": 1.1}.get(self.type_scale, 1.0)
-        rating_text = stars(game.rating)
-        if self.chip_level == "wide":
-            rating_btn = chip_btn(rating_text, theme.accent_alt.lighter(140), "Click to set rating")
-            rating_btn.clicked.connect(lambda: self._pick_rating())
-            meta.addWidget(rating_btn)
-
-        # Last played badge
-        last_played_text = relative_time(game.last_played)
-        if last_played_text and self.chip_level != "narrow":
-            last_played_lbl = QLabel(f"⏱ {last_played_text}")
-            last_played_lbl.setStyleSheet(
-                f"color: {theme.text_muted.name()}; "
-                f"font-size: 10px; "
-                f"padding: 2px 6px; "
-                f"background: transparent;"
-            )
-            last_played_lbl.setToolTip(f"Last played: {game.last_played.strftime('%Y-%m-%d %H:%M') if game.last_played else 'Never'}")
-            meta.addWidget(last_played_lbl)
-
-        # Update chip if applicable
-        inst_vi = parse_version(game.installed_version_raw) if game.installed_version_raw else None
-        src_vi = parse_version(game.source_version_raw) if game.source_version_raw else None
-        cmp = compare_versions(inst_vi, src_vi)
-        if game.source_url and cmp in (CompareResult.OLDER, CompareResult.UNKNOWN):
-            label = "Update" if cmp == CompareResult.OLDER else "Unknown"
-            update_btn = chip_btn(label, QColor(255, 132, 132, 45), "Open Updates view",
-                                  lambda: self.updates_clicked.emit(self.game.game_id))
-            meta.addWidget(update_btn)
-        meta.addStretch(1)
-        sheet_layout.addLayout(meta)
-
-    def _build_tags_row(self, sheet_layout: QVBoxLayout, theme, game: Game) -> None:
-        """Build the tags row."""
-        tags = game.tags or []
-        tag_row = QHBoxLayout()
-        tag_row.setSpacing(4)
-        scale = {"small": 0.9, "normal": 1.0, "large": 1.1}.get(self.type_scale, 1.0)
-
-        def chip_btn(text: str, color, tooltip: str = "", click=None) -> QPushButton:
-            btn = QPushButton(text)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFlat(True)
-            btn.setFocusPolicy(Qt.NoFocus)
-            btn.setStyleSheet(
-                f"QPushButton {{ {chip_style(theme, color)} }}"
-                f"QPushButton:hover {{ border-color:{theme.focus.name(QColor.HexArgb)}; }}"
-                f"QPushButton:pressed {{ background-color: {theme.focus.name(QColor.HexArgb)}; color:{theme.bg.name(QColor.HexArgb)}; }}"
-            )
-            btn.setToolTip(tooltip or text)
-            if click:
-                btn.clicked.connect(click)
-            return btn
-
-        if tags:
-            max_tags = 2
-            for t in tags[:max_tags]:
-                btn = chip_btn(t, theme.chip_bg.darker(105), "Filter by tag", lambda txt=t: self.tag_clicked.emit(txt))
-                btn.setMaximumWidth(120)
-                tag_row.addWidget(btn)
-            if len(tags) > max_tags and self.chip_level == "wide":
-                more = QLabel(f"+{len(tags) - max_tags} more")
-                more.setStyleSheet(f"color:{theme.text_muted.name()}; font-size:{round(11*scale)}px;")
-                tag_row.addWidget(more)
-        tag_row.addStretch(1)
-        sheet_layout.addLayout(tag_row)
-
-    def _build_action_buttons(self, sheet_layout: QVBoxLayout, game: Game) -> None:
-        """Build the quick action buttons."""
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(6)
-        play_btn = QPushButton("Play")
-        play_btn.setStyleSheet("padding: 6px 12px;")
-        play_btn.clicked.connect(lambda: self.play_clicked.emit(self.game.game_id))
-        folder_btn = QPushButton("Open folder")
-        folder_btn.setStyleSheet("padding: 6px 10px;")
-        folder_btn.clicked.connect(lambda: self.context_action.emit(self.game.game_id, "open_folder"))
-        btn_row.addWidget(play_btn)
-        btn_row.addWidget(folder_btn)
-        btn_row.addStretch(1)
-        sheet_layout.addLayout(btn_row)
+    def _show_context_menu(self) -> None:
+        """Show context menu from the more button."""
+        menu = QMenu(self)
+        menu.addAction("Add to collection\u2026").triggered.connect(
+            lambda: self.context_action.emit(self.game.game_id, "add_to_collection"))
+        menu.addSeparator()
+        menu.addAction("Open shortcut folder").triggered.connect(
+            lambda: self.context_action.emit(self.game.game_id, "open_folder"))
+        menu.addAction("Open shortcut file").triggered.connect(
+            lambda: self.context_action.emit(self.game.game_id, "open_file"))
+        menu.addSeparator()
+        menu.addAction("Rename\u2026").triggered.connect(
+            lambda: self.context_action.emit(self.game.game_id, "rename"))
+        menu.addAction("Remove\u2026").triggered.connect(
+            lambda: self.context_action.emit(self.game.game_id, "remove"))
+        menu.exec(QCursor.pos())
 
     # ---- Event handlers ----
     def mousePressEvent(self, event) -> None:
@@ -374,30 +357,34 @@ class GameCard(QFrame):
             self.context_action.emit(self.game.game_id, "remove")
 
     def enterEvent(self, event) -> None:
-        # Apply ambient color tint to overlay
-        self._apply_ambient_overlay()
         self.overlay_sheet.setVisible(True)
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
         self.overlay_anim.start()
-        # Elevate shadow on hover for "lift" effect
+        # Elevate shadow for "lift" effect
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
             theme = self._theme
-            self._shadow_effect.setBlurRadius(20)
-            self._shadow_effect.setOffset(0, 4)
-            self._shadow_effect.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_mid))
+            self._shadow_effect.setBlurRadius(24)
+            self._shadow_effect.setOffset(0, 6)
+            self._shadow_effect.setColor(QColor(
+                theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
+                theme.elevation_mid,
+            ))
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Backward)
         self.overlay_anim.start()
-        # Reset shadow to normal state
+        # Reset shadow
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
             theme = self._theme
-            self._shadow_effect.setBlurRadius(12)
-            self._shadow_effect.setOffset(0, 2)
-            self._shadow_effect.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_low))
+            self._shadow_effect.setBlurRadius(16)
+            self._shadow_effect.setOffset(0, 3)
+            self._shadow_effect.setColor(QColor(
+                theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
+                theme.elevation_low,
+            ))
         super().leaveEvent(event)
 
     def resizeEvent(self, event) -> None:

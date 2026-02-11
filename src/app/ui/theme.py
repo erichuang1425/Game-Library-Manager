@@ -24,6 +24,20 @@ class ThemeSpec:
     focus: QColor
     outline: QColor
     shadow: QColor
+    # Semantic status colors
+    status_backlog: QColor = None  # type: ignore[assignment]
+    status_playing: QColor = None  # type: ignore[assignment]
+    status_finished: QColor = None  # type: ignore[assignment]
+    status_dropped: QColor = None  # type: ignore[assignment]
+    # Semantic feedback colors
+    success: QColor = None  # type: ignore[assignment]
+    warning: QColor = None  # type: ignore[assignment]
+    error: QColor = None  # type: ignore[assignment]
+    # Surface hierarchy
+    surface_raised: QColor = None  # type: ignore[assignment]
+    surface_sunken: QColor = None  # type: ignore[assignment]
+    # Header gradient
+    header_bg: QColor = None  # type: ignore[assignment]
     # Design tokens - spacing (8px grid system)
     spacing_xs: int = 4
     spacing_sm: int = 8
@@ -35,6 +49,7 @@ class ThemeSpec:
     radius_md: int = 10
     radius_lg: int = 14
     radius_xl: int = 18
+    radius_pill: int = 50
     # Design tokens - animation durations (ms)
     anim_fast: int = 100
     anim_normal: int = 180
@@ -43,6 +58,14 @@ class ThemeSpec:
     elevation_low: int = 20
     elevation_mid: int = 40
     elevation_high: int = 70
+    # Layout dimensions
+    sidebar_width_min: int = 220
+    sidebar_width_max: int = 320
+    details_width_min: int = 340
+    details_width_max: int = 520
+    toolbar_height: int = 48
+    grid_gap: int = 14
+    grid_padding: int = 16
 
 
 def _c(r: int, g: int, b: int, a: int = 255) -> QColor:
@@ -56,35 +79,55 @@ THEMES: Dict[str, ThemeSpec] = {
         surface=_c(30, 34, 44),
         surface_alt=_c(40, 45, 55),
         card=_c(36, 42, 52),
-        card_border=_c(66, 73, 87),
+        card_border=_c(50, 56, 68),
         card_hover=_c(80, 105, 130),
         text=_c(235, 238, 245),
-        text_muted=_c(170, 178, 190),
+        text_muted=_c(150, 158, 172),
         accent=_c(92, 193, 255),
         accent_alt=_c(255, 203, 92),
         chip_bg=_c(52, 61, 75),
         chip_border=_c(70, 83, 98),
         focus=_c(92, 193, 255),
-        outline=_c(60, 68, 82),
+        outline=_c(50, 56, 68),
         shadow=_c(0, 0, 0, 150),
+        status_backlog=_c(120, 170, 230),
+        status_playing=_c(80, 210, 130),
+        status_finished=_c(255, 190, 70),
+        status_dropped=_c(220, 100, 80),
+        success=_c(80, 210, 130),
+        warning=_c(255, 190, 70),
+        error=_c(230, 75, 60),
+        surface_raised=_c(44, 50, 62),
+        surface_sunken=_c(16, 18, 24),
+        header_bg=_c(24, 27, 35),
     ),
     "light": ThemeSpec(
         name="Light",
         bg=_c(246, 249, 252),
         surface=_c(255, 255, 255),
-        surface_alt=_c(243, 246, 250),
+        surface_alt=_c(240, 243, 248),
         card=_c(255, 255, 255),
-        card_border=_c(215, 222, 232),
+        card_border=_c(228, 232, 240),
         card_hover=_c(190, 210, 240),
         text=_c(28, 32, 38),
-        text_muted=_c(92, 104, 118),
+        text_muted=_c(105, 115, 130),
         accent=_c(41, 121, 255),
         accent_alt=_c(255, 152, 0),
         chip_bg=_c(235, 240, 248),
         chip_border=_c(210, 218, 230),
         focus=_c(41, 121, 255),
-        outline=_c(200, 210, 225),
-        shadow=_c(0, 0, 0, 80),
+        outline=_c(218, 224, 235),
+        shadow=_c(0, 0, 0, 55),
+        status_backlog=_c(60, 130, 220),
+        status_playing=_c(40, 180, 100),
+        status_finished=_c(230, 160, 20),
+        status_dropped=_c(210, 80, 60),
+        success=_c(40, 180, 100),
+        warning=_c(230, 160, 20),
+        error=_c(220, 60, 50),
+        surface_raised=_c(255, 255, 255),
+        surface_sunken=_c(234, 238, 244),
+        header_bg=_c(255, 255, 255),
     ),
     "neubrutalism": ThemeSpec(
         name="Neubrutalism",
@@ -103,6 +146,16 @@ THEMES: Dict[str, ThemeSpec] = {
         focus=_c(72, 133, 237),
         outline=_c(30, 30, 30),
         shadow=_c(0, 0, 0, 180),
+        status_backlog=_c(72, 133, 237),
+        status_playing=_c(46, 196, 100),
+        status_finished=_c(255, 200, 0),
+        status_dropped=_c(255, 94, 91),
+        success=_c(46, 196, 100),
+        warning=_c(255, 200, 0),
+        error=_c(255, 94, 91),
+        surface_raised=_c(255, 255, 255),
+        surface_sunken=_c(238, 238, 238),
+        header_bg=_c(255, 255, 255),
     ),
     "neumorphism": ThemeSpec(
         name="Neumorphism",
@@ -121,6 +174,16 @@ THEMES: Dict[str, ThemeSpec] = {
         focus=_c(126, 87, 194),
         outline=_c(190, 198, 212),
         shadow=_c(0, 0, 0, 70),
+        status_backlog=_c(100, 140, 210),
+        status_playing=_c(0, 191, 165),
+        status_finished=_c(255, 180, 50),
+        status_dropped=_c(210, 90, 70),
+        success=_c(0, 191, 165),
+        warning=_c(255, 180, 50),
+        error=_c(210, 70, 60),
+        surface_raised=_c(240, 245, 252),
+        surface_sunken=_c(215, 220, 228),
+        header_bg=_c(230, 235, 243),
     ),
     "glassmorphism": ThemeSpec(
         name="Glassmorphism",
@@ -128,17 +191,27 @@ THEMES: Dict[str, ThemeSpec] = {
         surface=_c(20, 28, 44, 180),
         surface_alt=_c(28, 38, 58, 200),
         card=_c(32, 46, 70, 210),
-        card_border=_c(92, 193, 255, 120),
-        card_hover=_c(92, 193, 255, 160),
+        card_border=_c(92, 193, 255, 70),
+        card_hover=_c(92, 193, 255, 130),
         text=_c(235, 242, 255),
-        text_muted=_c(180, 195, 220),
+        text_muted=_c(160, 180, 210),
         accent=_c(92, 193, 255),
         accent_alt=_c(255, 255, 255),
         chip_bg=_c(92, 193, 255, 40),
         chip_border=_c(92, 193, 255, 90),
         focus=_c(92, 193, 255),
-        outline=_c(72, 120, 160, 130),
+        outline=_c(72, 120, 160, 80),
         shadow=_c(0, 0, 0, 120),
+        status_backlog=_c(100, 180, 255),
+        status_playing=_c(80, 230, 150),
+        status_finished=_c(255, 200, 80),
+        status_dropped=_c(255, 110, 90),
+        success=_c(80, 230, 150),
+        warning=_c(255, 200, 80),
+        error=_c(255, 90, 70),
+        surface_raised=_c(38, 54, 80, 220),
+        surface_sunken=_c(10, 14, 24),
+        header_bg=_c(16, 22, 36, 220),
     ),
     "high_contrast": ThemeSpec(
         name="High Contrast",
@@ -157,6 +230,16 @@ THEMES: Dict[str, ThemeSpec] = {
         focus=_c(255, 255, 0),
         outline=_c(255, 255, 255),
         shadow=_c(255, 255, 255, 80),
+        status_backlog=_c(0, 255, 255),
+        status_playing=_c(0, 255, 0),
+        status_finished=_c(255, 255, 0),
+        status_dropped=_c(255, 0, 0),
+        success=_c(0, 255, 0),
+        warning=_c(255, 255, 0),
+        error=_c(255, 0, 0),
+        surface_raised=_c(30, 30, 30),
+        surface_sunken=_c(0, 0, 0),
+        header_bg=_c(0, 0, 0),
         # Larger focus indicators for accessibility
         radius_sm=4,
         radius_md=6,
@@ -286,38 +369,44 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
         font-weight: 600;
     }}
     QScrollBar:vertical {{
-        background: {theme.surface.name(QColor.HexArgb)};
-        width: 10px;
-        border-radius: 5px;
-        margin: 2px;
+        background: transparent;
+        width: 8px;
+        border-radius: 4px;
+        margin: 4px 2px;
     }}
     QScrollBar::handle:vertical {{
-        background: {theme.outline.name(QColor.HexArgb)};
-        border-radius: 4px;
-        min-height: 30px;
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},60);
+        border-radius: 3px;
+        min-height: 40px;
     }}
     QScrollBar::handle:vertical:hover {{
-        background: {theme.text_muted.name()};
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},120);
     }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
     }}
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+        background: transparent;
+    }}
     QScrollBar:horizontal {{
-        background: {theme.surface.name(QColor.HexArgb)};
-        height: 10px;
-        border-radius: 5px;
-        margin: 2px;
+        background: transparent;
+        height: 8px;
+        border-radius: 4px;
+        margin: 2px 4px;
     }}
     QScrollBar::handle:horizontal {{
-        background: {theme.outline.name(QColor.HexArgb)};
-        border-radius: 4px;
-        min-width: 30px;
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},60);
+        border-radius: 3px;
+        min-width: 40px;
     }}
     QScrollBar::handle:horizontal:hover {{
-        background: {theme.text_muted.name()};
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},120);
     }}
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
         width: 0px;
+    }}
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+        background: transparent;
     }}
     QComboBox::drop-down {{
         border: none;
@@ -420,16 +509,7 @@ def focus_ring_style(theme: ThemeSpec, width: int = 2) -> str:
 
 
 def filter_chip_style(theme: ThemeSpec, active: bool = False, removable: bool = False) -> str:
-    """Generate styling for active filter chips.
-
-    Args:
-        theme: Current theme spec
-        active: Whether the filter is active
-        removable: Whether to show remove indicator
-
-    Returns:
-        Complete stylesheet for a filter chip
-    """
+    """Generate styling for active filter chips."""
     if active:
         bg = theme.accent
         text = theme.bg
@@ -448,3 +528,132 @@ def filter_chip_style(theme: ThemeSpec, active: bool = False, removable: bool = 
         f"font-weight: 500; "
         f"border: 1px solid {border.name(QColor.HexArgb)};"
     )
+
+
+# --------------- Button style tiers ---------------
+
+def primary_btn_style(theme: ThemeSpec) -> str:
+    """Filled accent button for primary actions (Play, Scan)."""
+    return (
+        f"QPushButton {{ "
+        f"background: {theme.accent.name()}; "
+        f"color: {theme.bg.name()}; "
+        f"border: none; "
+        f"border-radius: {theme.radius_md}px; "
+        f"padding: 8px 20px; "
+        f"font-weight: 600; font-size: 13px; "
+        f"}} "
+        f"QPushButton:hover {{ background: {theme.accent.lighter(112).name()}; }} "
+        f"QPushButton:pressed {{ background: {theme.accent.darker(110).name()}; }} "
+        f"QPushButton:disabled {{ background: {theme.surface_alt.name(QColor.HexArgb)}; "
+        f"color: {theme.text_muted.name()}; }}"
+    )
+
+
+def secondary_btn_style(theme: ThemeSpec) -> str:
+    """Outlined accent button for secondary actions (Check Updates, Open)."""
+    return (
+        f"QPushButton {{ "
+        f"background: transparent; "
+        f"color: {theme.accent.name()}; "
+        f"border: 1px solid {theme.accent.name()}; "
+        f"border-radius: {theme.radius_md}px; "
+        f"padding: 7px 16px; "
+        f"font-weight: 500; font-size: 12px; "
+        f"}} "
+        f"QPushButton:hover {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},25); }} "
+        f"QPushButton:pressed {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},50); }} "
+        f"QPushButton:disabled {{ color: {theme.text_muted.name()}; "
+        f"border-color: {theme.outline.name(QColor.HexArgb)}; }}"
+    )
+
+
+def ghost_btn_style(theme: ThemeSpec) -> str:
+    """Borderless button for subtle actions (Settings, Close)."""
+    return (
+        f"QPushButton, QToolButton {{ "
+        f"background: transparent; "
+        f"color: {theme.text_muted.name()}; "
+        f"border: none; "
+        f"border-radius: {theme.radius_sm}px; "
+        f"padding: 6px 10px; "
+        f"font-size: 12px; "
+        f"}} "
+        f"QPushButton:hover, QToolButton:hover {{ "
+        f"color: {theme.text.name()}; "
+        f"background: {theme.surface_alt.name(QColor.HexArgb)}; }} "
+        f"QPushButton:pressed, QToolButton:pressed {{ "
+        f"background: {theme.surface_alt.darker(108).name(QColor.HexArgb)}; }}"
+    )
+
+
+def danger_btn_style(theme: ThemeSpec) -> str:
+    """Red-tinted button for destructive actions (Delete, Remove)."""
+    err = theme.error or _c(230, 75, 60)
+    return (
+        f"QPushButton {{ "
+        f"background: transparent; "
+        f"color: {err.name()}; "
+        f"border: 1px solid {err.name()}; "
+        f"border-radius: {theme.radius_md}px; "
+        f"padding: 7px 16px; "
+        f"font-weight: 500; font-size: 12px; "
+        f"}} "
+        f"QPushButton:hover {{ background: rgba({err.red()},{err.green()},{err.blue()},25); }} "
+        f"QPushButton:pressed {{ background: rgba({err.red()},{err.green()},{err.blue()},50); }}"
+    )
+
+
+def header_bar_style(theme: ThemeSpec) -> str:
+    """Style for the slim header/title bar."""
+    hbg = theme.header_bg or theme.surface
+    return (
+        f"background: {hbg.name(QColor.HexArgb)}; "
+        f"border-bottom: 1px solid {theme.outline.name(QColor.HexArgb)};"
+    )
+
+
+def section_header_style(theme: ThemeSpec) -> str:
+    """Style for section headers (uppercase, small, muted)."""
+    return (
+        f"color: {theme.text_muted.name()}; "
+        f"font-size: 10px; font-weight: 700; "
+        f"letter-spacing: 1px; "
+        f"padding: {theme.spacing_sm}px {theme.spacing_sm}px {theme.spacing_xs}px; "
+        f"border: none; background: transparent;"
+    )
+
+
+def status_color(theme: ThemeSpec, status: str) -> QColor:
+    """Get the semantic color for a game status."""
+    mapping = {
+        "backlog": theme.status_backlog,
+        "playing": theme.status_playing,
+        "finished": theme.status_finished,
+        "dropped": theme.status_dropped,
+    }
+    return mapping.get(status) or theme.accent
+
+
+def sidebar_item_style(theme: ThemeSpec) -> str:
+    """Style for sidebar navigation items."""
+    return f"""
+        QListWidget {{
+            background: transparent;
+            border: none;
+            outline: none;
+        }}
+        QListWidget::item {{
+            padding: {theme.spacing_sm}px {theme.spacing_md}px;
+            border-radius: {theme.radius_sm}px;
+            margin: 2px {theme.spacing_xs}px;
+            border: none;
+        }}
+        QListWidget::item:selected {{
+            background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},30);
+            color: {theme.accent.name()};
+        }}
+        QListWidget::item:hover:!selected {{
+            background: {theme.surface_alt.name(QColor.HexArgb)};
+        }}
+    """

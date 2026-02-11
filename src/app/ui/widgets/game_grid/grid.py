@@ -23,7 +23,8 @@ from PySide6.QtGui import QColor
 from shiboken6 import isValid
 
 from app.models import Game
-from app.ui.theme import current_theme, card_style
+from app.ui.theme import current_theme, card_style, primary_btn_style, secondary_btn_style
+from app.ui.icons import AppIcons
 from app.logging_utils import get_logger, kv, RateLimiter, wrap_slot
 
 from .card import GameCard
@@ -69,8 +70,12 @@ class GameGrid(QWidget):
 
         self.container = QWidget()
         self.grid = QGridLayout(self.container)
-        self.grid.setContentsMargins(0, 0, 0, 0)
-        self.grid.setSpacing(10)
+        theme = current_theme()
+        self.grid.setContentsMargins(
+            theme.grid_padding, theme.grid_padding,
+            theme.grid_padding, theme.grid_padding,
+        )
+        self.grid.setSpacing(theme.grid_gap)
         self.container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.scroll.setWidget(self.container)
@@ -345,64 +350,74 @@ class GameGrid(QWidget):
             self._loading_overlay.setGeometry(self.rect())
 
     def _build_empty_state(self) -> QWidget:
-        """Build the empty state widget shown when no games are present."""
+        """Build a polished empty state widget."""
         theme = current_theme()
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(40, 60, 40, 60)
-        layout.setSpacing(16)
-
+        layout.setContentsMargins(60, 80, 60, 80)
+        layout.setSpacing(12)
         layout.addStretch(2)
 
-        # Icon placeholder (using unicode game controller)
-        icon_label = QLabel("🎮")
+        # Large icon
+        icon_label = QLabel(AppIcons.NAV_LIBRARY)
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet(f"font-size: 64px; color: {theme.text_muted.name()};")
+        icon_label.setStyleSheet(
+            f"font-size: 72px; color: {theme.text_muted.name()}; "
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(icon_label)
 
+        layout.addSpacing(8)
+
         # Title
-        title = QLabel("No games in your library")
+        title = QLabel("Your library is empty")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(f"font-size: 20px; font-weight: 600; color: {theme.text.name()};")
+        title.setStyleSheet(
+            f"font-size: 22px; font-weight: 700; color: {theme.text.name()}; "
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(title)
 
         # Description
-        desc = QLabel("Scan your shortcuts folder to add games, or check your search filters.")
+        desc = QLabel(
+            "Point the scanner at your shortcuts folder to build your library,\n"
+            "or adjust your search filters if you expect to see games."
+        )
         desc.setAlignment(Qt.AlignCenter)
         desc.setWordWrap(True)
-        desc.setStyleSheet(f"font-size: 13px; color: {theme.text_muted.name()}; max-width: 400px;")
+        desc.setStyleSheet(
+            f"font-size: 13px; color: {theme.text_muted.name()}; "
+            f"line-height: 1.5; max-width: 440px; "
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(desc)
 
-        layout.addSpacing(12)
+        layout.addSpacing(20)
 
-        # Action buttons row
+        # Action buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         btn_row.addStretch(1)
 
-        scan_btn = QPushButton("Scan Shortcuts")
-        scan_btn.setMinimumWidth(140)
-        scan_btn.setStyleSheet(
-            f"QPushButton {{ "
-            f"background: {theme.accent.name()}; "
-            f"color: {theme.bg.name()}; "
-            f"padding: 10px 20px; "
-            f"border-radius: {theme.radius_md}px; "
-            f"font-weight: 600; "
-            f"font-size: 13px; "
-            f"border: none; "
-            f"}} "
-            f"QPushButton:hover {{ background: {theme.accent.lighter(110).name()}; }}"
-        )
+        scan_btn = QPushButton(f"{AppIcons.ACT_SCAN}  Scan Shortcuts")
+        scan_btn.setMinimumWidth(160)
+        scan_btn.setStyleSheet(primary_btn_style(theme))
         scan_btn.setCursor(Qt.PointingHandCursor)
         scan_btn.clicked.connect(lambda: self.scan_requested.emit())
         btn_row.addWidget(scan_btn)
+
+        import_btn = QPushButton(f"{AppIcons.ACT_IMPORT}  Import Library")
+        import_btn.setMinimumWidth(140)
+        import_btn.setStyleSheet(secondary_btn_style(theme))
+        import_btn.setCursor(Qt.PointingHandCursor)
+        # Import is handled at the window level; emit scan as a fallback signal
+        import_btn.setToolTip("Import a previously exported library JSON file")
+        btn_row.addWidget(import_btn)
 
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
         layout.addStretch(3)
-
         return widget
 
     def _update_empty_state_visibility(self) -> None:
