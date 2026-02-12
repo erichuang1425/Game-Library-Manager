@@ -204,6 +204,7 @@ class GameOpsMixin:
             return
 
         self._all_games = [g for g in self._all_games if g.game_id != game_id]
+        self._rebuild_search_cache()
         self._apply_search()
         save_library_bundle(library_json_path(), self._all_games, self._collections)
 

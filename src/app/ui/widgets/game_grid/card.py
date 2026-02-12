@@ -23,6 +23,7 @@ from PySide6.QtGui import QCursor, QColor, QPixmap
 
 from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, best_icon_path, extract_dominant_color
+from app.services.color_extractor import get_cached_dominant_color
 from app.services.version_parser import CompareResult
 from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion, status_color
 from app.ui.icons import AppIcons
@@ -93,10 +94,12 @@ class GameCard(QFrame):
         layout.setSpacing(4 if view_mode == "compact" else 8)
         self.setMinimumHeight(220 if view_mode == "comfortable" else 160)
 
-        # Build the card UI: icon, title, always-visible metadata, hover actions
+        # Build the card UI: icon, title, always-visible metadata
         self._build_icon_area(layout, theme, view_mode, game)
         self._build_info_section(layout, theme, view_mode, game)
-        self._build_overlay_sheet(layout, theme, game)
+        # Overlay is built lazily on first hover to reduce construction cost
+        self._overlay_built = False
+        self._card_layout = layout
 
     def _build_icon_area(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
         """Build the icon/image area with status bar and update badge."""
@@ -367,7 +370,15 @@ class GameCard(QFrame):
         elif chosen == a_remove:
             self.context_action.emit(self.game.game_id, "remove")
 
+    def _ensure_overlay(self) -> None:
+        """Build the overlay sheet on first hover (lazy construction)."""
+        if self._overlay_built:
+            return
+        self._overlay_built = True
+        self._build_overlay_sheet(self._card_layout, self._theme, self.game)
+
     def enterEvent(self, event) -> None:
+        self._ensure_overlay()
         self.overlay_sheet.setVisible(True)
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
@@ -389,9 +400,10 @@ class GameCard(QFrame):
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.overlay_anim.stop()
-        self.overlay_anim.setDirection(QPropertyAnimation.Backward)
-        self.overlay_anim.start()
+        if self._overlay_built:
+            self.overlay_anim.stop()
+            self.overlay_anim.setDirection(QPropertyAnimation.Backward)
+            self.overlay_anim.start()
         theme = self._theme
         # Reset shadow
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
@@ -521,13 +533,19 @@ class GameCard(QFrame):
         self.icon_label.setPixmap(pm)
 
     def _extract_ambient_color(self) -> None:
-        """Extract dominant color from icon for ambient accent effects."""
+        """Extract dominant color from icon for ambient accent effects (cached per path)."""
         pm = self.icon_label.pixmap()
         if pm and not pm.isNull():
-            self._ambient_color = extract_dominant_color(pm)
+            icon_path = best_icon_path(self.game)
+            if icon_path:
+                self._ambient_color = get_cached_dominant_color(icon_path, pm)
+            else:
+                self._ambient_color = extract_dominant_color(pm)
 
     def _apply_ambient_overlay(self) -> None:
         """Apply ambient color tint to overlay sheet on hover."""
+        if not self._overlay_built:
+            return
         theme = self._theme
         if self._ambient_color and self._ambient_color.isValid():
             # Blend ambient color with surface for subtle tint

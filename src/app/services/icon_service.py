@@ -14,8 +14,9 @@ _icon_provider = QFileIconProvider()
 _log = get_logger("icons")
 _rate = RateLimiter()
 
-# use a generously large base size so downscales stay crisp
-_BASE_ICON_SIZE = 1024  # request jumbo icons; Qt will pick best available
+# Base size for icon cache. 512 is sufficient for max card width of 320px
+# while using 1/4 the memory of 1024. Qt SmoothTransformation keeps quality.
+_BASE_ICON_SIZE = 512
 
 @lru_cache(maxsize=2048)
 def _icon_for_path_cached(path: str) -> QIcon:

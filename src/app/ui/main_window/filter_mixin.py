@@ -6,6 +6,7 @@ from app.models import Game
 from app.services import (
     apply_collection, apply_quick_filter, apply_dropdown_filters,
     apply_search_filter, sort_games, count_quick_filter_matches,
+    get_search_cache,
 )
 from app.ui.widgets import build_filter_chips
 from app.logging_utils import kv
@@ -16,6 +17,23 @@ if TYPE_CHECKING:
 
 class FilterMixin:
     """Mixin providing filter and search operations for MainWindow."""
+
+    def _init_search_cache(self: "MainWindow") -> None:
+        """Initialize and populate the search cache from the full game list."""
+        self._search_cache = get_search_cache()
+        self._search_cache.build(self._all_games)
+
+    def _invalidate_search_cache(self: "MainWindow", game_id: str) -> None:
+        """Mark a single game as dirty in the search cache after edits."""
+        self._search_cache.invalidate(game_id)
+
+    def _rebuild_search_cache(self: "MainWindow") -> None:
+        """Rebuild the search cache (e.g. after scan or import)."""
+        self._search_cache.build(self._all_games)
+
+    def _on_search_text_changed(self: "MainWindow") -> None:
+        """Restart the debounce timer on each keystroke."""
+        self._search_debounce.start()
 
     def _apply_search(self: "MainWindow") -> None:
         # 1) start from full list
@@ -42,9 +60,12 @@ class FilterMixin:
             tag_filter=self._tag_filter,
         )
 
-        # 5) apply search text
+        # 5) apply search text using cached haystacks
         search_text = self.search.text().strip()
-        self._filtered = apply_search_filter(base, search_text)
+        if search_text:
+            self._filtered = self._search_cache.search(base, search_text)
+        else:
+            self._filtered = base
 
         # 6) sort
         self._filtered = sort_games(self._filtered, self._sort_by)

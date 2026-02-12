@@ -4,9 +4,26 @@ Extracts dominant colors from game icons to create dynamic, contextual UI accent
 """
 from __future__ import annotations
 from functools import lru_cache
-from typing import Tuple, Optional
+from typing import Dict, Tuple, Optional
 
 from PySide6.QtGui import QPixmap, QColor, QImage
+
+# Cache of dominant colors keyed by icon path to avoid re-extracting on every card rebuild.
+_dominant_color_cache: Dict[str, Optional[QColor]] = {}
+
+
+def get_cached_dominant_color(path: str, pixmap: QPixmap, sample_size: int = 32) -> Optional[QColor]:
+    """Return the dominant color for a path, using a cache to avoid redundant pixel scans."""
+    if path in _dominant_color_cache:
+        return _dominant_color_cache[path]
+    color = extract_dominant_color(pixmap, sample_size)
+    _dominant_color_cache[path] = color
+    return color
+
+
+def clear_dominant_color_cache() -> None:
+    """Clear the dominant color cache (e.g. on theme change)."""
+    _dominant_color_cache.clear()
 
 
 def _rgb_to_hsv(r: int, g: int, b: int) -> Tuple[float, float, float]:

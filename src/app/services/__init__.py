@@ -7,7 +7,7 @@ from .library_merge import merge_scanned_into_library
 from .collection_engine import apply_collection
 from .version_parser import parse_version, compare_versions
 from .update_checker import fetch_source_version, check_updates_background
-from .color_extractor import extract_dominant_color, extract_palette, color_for_overlay
+from .color_extractor import extract_dominant_color, extract_palette, color_for_overlay, get_cached_dominant_color, clear_dominant_color_cache
 from .export_import import (
     export_to_json, export_to_csv, export_to_markdown,
     import_from_json, import_from_csv, merge_imported_games

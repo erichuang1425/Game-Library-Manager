@@ -250,6 +250,7 @@ class DialogMixin:
                     self._all_games.append(game)
 
             self._save_bundle()
+            self._rebuild_search_cache()
             self._apply_search()
             self.sidebar.set_games(self._all_games)
             self.statusBar().showMessage(f"Imported {len(new_games)} games", 3000)
