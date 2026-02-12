@@ -50,18 +50,19 @@ class Toast(QWidget):
         }
         bg_color, icon = colors.get(toast_type, (theme.accent, "ℹ"))
 
-        # Container styling
+        # Container styling with colored left accent strip
         self.setStyleSheet(
             f"QWidget {{ "
             f"background: {theme.surface.name(QColor.HexArgb)}; "
             f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+            f"border-left: 3px solid {bg_color.name()}; "
             f"border-radius: {theme.radius_md}px; "
             f"}} "
         )
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
 
         # Icon
         icon_label = QLabel(icon)

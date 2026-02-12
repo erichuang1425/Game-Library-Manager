@@ -10,38 +10,38 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class TypeScale:
     """Typography scale based on a base size and multiplier."""
-    base: int = 11
+    base: int = 13
 
     @property
     def caption(self) -> int:
-        return int(self.base * 0.82)  # ~9px
+        return int(self.base * 0.84)  # ~11px
 
     @property
     def body(self) -> int:
-        return self.base  # 11px
+        return self.base  # 13px
 
     @property
     def body_lg(self) -> int:
-        return int(self.base * 1.1)  # ~12px
+        return int(self.base * 1.08)  # ~14px
 
     @property
     def heading(self) -> int:
-        return int(self.base * 1.27)  # ~14px
+        return int(self.base * 1.23)  # ~16px
 
     @property
     def title(self) -> int:
-        return int(self.base * 1.45)  # ~16px
+        return int(self.base * 1.46)  # ~19px
 
     @property
     def display(self) -> int:
-        return int(self.base * 1.64)  # ~18px
+        return int(self.base * 1.69)  # ~22px
 
 
 # Pre-defined scales for font size preferences
 SCALES = {
-    "small": TypeScale(base=10),
-    "default": TypeScale(base=11),
-    "large": TypeScale(base=13),
+    "small": TypeScale(base=12),
+    "default": TypeScale(base=13),
+    "large": TypeScale(base=15),
 }
 
 

@@ -90,7 +90,7 @@ class GameCard(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(pad, pad, pad, pad)
-        layout.setSpacing(4 if view_mode == "compact" else 6)
+        layout.setSpacing(4 if view_mode == "compact" else 8)
         self.setMinimumHeight(220 if view_mode == "comfortable" else 160)
 
         # Build the card UI: icon, title, always-visible metadata, hover actions
@@ -99,11 +99,16 @@ class GameCard(QFrame):
         self._build_overlay_sheet(layout, theme, game)
 
     def _build_icon_area(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
-        """Build the icon/image area with status dot and update indicator."""
+        """Build the icon/image area with status bar and update badge."""
+        # Container for icon + status bar
+        icon_container = QVBoxLayout()
+        icon_container.setContentsMargins(0, 0, 0, 0)
+        icon_container.setSpacing(0)
+
         self.icon_frame = QFrame()
         self.icon_frame.setStyleSheet(
             f"QFrame {{ background:{theme.surface_alt.name(QColor.HexArgb)}; "
-            f"border-radius:{theme.radius_md}px; border: none; }}"
+            f"border-radius:{theme.radius_md}px; border: none; overflow: hidden; }}"
         )
         icon_ratio = 0.65 if view_mode == "comfortable" else 0.55
         icon_height = int(self.minimumHeight() * icon_ratio)
@@ -117,59 +122,65 @@ class GameCard(QFrame):
         self.icon_label = QLabel()
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.icon_label.setScaledContents(False)
+        self.icon_label.setStyleSheet("border: none; background: transparent;")
         self._set_icon_pixmap(icon_height)
         base_layout.addWidget(self.icon_label)
 
         self._ambient_color: QColor | None = None
         self._extract_ambient_color()
 
-        # Overlay with status dot + selection checkbox
-        status_overlay = QWidget()
-        status_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
-        sw = QHBoxLayout(status_overlay)
+        # Overlay for selection checkbox + update badge
+        badge_overlay = QWidget()
+        badge_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        sw = QHBoxLayout(badge_overlay)
         sw.setContentsMargins(8, 8, 8, 8)
         sw.setSpacing(4)
 
         # Selection checkbox (multi-select mode)
         self._select_checkbox = QLabel("\u2610")
-        self._select_checkbox.setFixedSize(22, 22)
+        self._select_checkbox.setFixedSize(24, 24)
         self._select_checkbox.setAlignment(Qt.AlignCenter)
         self._select_checkbox.setStyleSheet(
-            f"background: rgba(0,0,0,0.5); color: white; "
-            f"border-radius: 4px; font-size: 14px; font-weight: bold;"
+            f"background: rgba(0,0,0,0.55); color: white; "
+            f"border-radius: 6px; font-size: 14px; font-weight: bold;"
         )
         self._select_checkbox.setToolTip("Click to select")
         self._select_checkbox.hide()
         sw.addWidget(self._select_checkbox, 0, Qt.AlignLeft | Qt.AlignTop)
 
-        # Status dot (8px colored circle using semantic status colors)
-        sc = status_color(theme, game.status)
-        status_dot = QLabel()
-        status_dot.setFixedSize(10, 10)
-        status_dot.setStyleSheet(
-            f"background: {sc.name()}; border-radius: 5px; border: none;"
-        )
-        status_dot.setToolTip(status_label(game.status))
-        sw.addWidget(status_dot, 0, Qt.AlignLeft | Qt.AlignTop)
-
         sw.addStretch(1)
 
-        # Update indicator dot (top-right, accent-colored)
+        # Update indicator badge (top-right, accent-colored pill)
         inst_vi = parse_version(game.installed_version_raw) if game.installed_version_raw else None
         src_vi = parse_version(game.source_version_raw) if game.source_version_raw else None
         cmp = compare_versions(inst_vi, src_vi)
         if game.source_url and cmp in (CompareResult.OLDER, CompareResult.UNKNOWN):
-            update_dot = QLabel()
-            update_dot.setFixedSize(10, 10)
-            update_dot.setStyleSheet(
-                f"background: {theme.accent.name()}; border-radius: 5px; border: none;"
+            update_badge = QLabel(AppIcons.STS_UPDATE)
+            update_badge.setFixedSize(24, 24)
+            update_badge.setAlignment(Qt.AlignCenter)
+            update_badge.setStyleSheet(
+                f"background: {theme.accent.name()}; color: {theme.bg.name()}; "
+                f"border-radius: 12px; font-size: 12px; font-weight: bold; border: none;"
             )
-            update_dot.setToolTip("Update available" if cmp == CompareResult.OLDER else "Version unknown")
-            sw.addWidget(update_dot, 0, Qt.AlignRight | Qt.AlignTop)
+            update_badge.setToolTip("Update available" if cmp == CompareResult.OLDER else "Version unknown")
+            sw.addWidget(update_badge, 0, Qt.AlignRight | Qt.AlignTop)
 
-        base_layout.addWidget(status_overlay)
+        base_layout.addWidget(badge_overlay)
         icon_layout.addWidget(base)
-        layout.addWidget(self.icon_frame)
+        icon_container.addWidget(self.icon_frame)
+
+        # Status bar — colored strip at bottom of icon area
+        sc = status_color(theme, game.status)
+        self._status_bar = QFrame()
+        self._status_bar.setFixedHeight(3)
+        self._status_bar.setStyleSheet(
+            f"background: {sc.name()}; border: none; "
+            f"border-radius: 0px;"
+        )
+        self._status_bar.setToolTip(status_label(game.status))
+        icon_container.addWidget(self._status_bar)
+
+        layout.addLayout(icon_container)
 
     def _build_info_section(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
         """Build the always-visible info section: title, rating + time, tags."""
@@ -177,7 +188,7 @@ class GameCard(QFrame):
 
         # Title (bold, 2-line max)
         title = QLabel()
-        title_size = int((14 if view_mode == "comfortable" else 12) * scale)
+        title_size = int((15 if view_mode == "comfortable" else 13) * scale)
         fm = title.fontMetrics()
         title.setWordWrap(True)
         title.setMaximumHeight(fm.lineSpacing() * 2 + 4)
@@ -190,7 +201,7 @@ class GameCard(QFrame):
         layout.addWidget(title)
 
         # Rating + last played (always visible, muted)
-        meta_size = int(10 * scale)
+        meta_size = int(11 * scale)
         rating_text = stars(game.rating)
         time_text = relative_time(game.last_played)
 
@@ -215,24 +226,24 @@ class GameCard(QFrame):
             tags = game.tags or []
             if tags:
                 tag_row = QHBoxLayout()
-                tag_row.setContentsMargins(0, 2, 0, 0)
+                tag_row.setContentsMargins(0, 4, 0, 0)
                 tag_row.setSpacing(4)
                 max_tags = 2 if self.chip_level == "narrow" else 3
                 for t in tags[:max_tags]:
                     tag_lbl = QLabel(t)
                     tag_lbl.setStyleSheet(
-                        f"font-size: {int(9 * scale)}px; "
+                        f"font-size: {int(10 * scale)}px; "
                         f"color: {theme.text_muted.name()}; "
                         f"background: {theme.chip_bg.name(QColor.HexArgb)}; "
                         f"border-radius: {theme.radius_sm - 2}px; "
-                        f"padding: 1px 6px; border: none;"
+                        f"padding: 2px 8px; border: none;"
                     )
                     tag_lbl.setMaximumWidth(90)
                     tag_row.addWidget(tag_lbl)
                 if len(tags) > max_tags:
                     more = QLabel(f"+{len(tags) - max_tags}")
                     more.setStyleSheet(
-                        f"font-size: {int(9 * scale)}px; color: {theme.text_muted.name()}; "
+                        f"font-size: {int(10 * scale)}px; color: {theme.text_muted.name()}; "
                         f"background: transparent; border: none;"
                     )
                     tag_row.addWidget(more)
@@ -257,16 +268,16 @@ class GameCard(QFrame):
         self.overlay_anim.finished.connect(self._on_overlay_anim_finished)
 
         sheet_layout = QHBoxLayout(self.overlay_sheet)
-        sheet_layout.setContentsMargins(8, 6, 8, 6)
-        sheet_layout.setSpacing(6)
+        sheet_layout.setContentsMargins(8, 8, 8, 8)
+        sheet_layout.setSpacing(8)
 
         # Action buttons only
         play_btn = QPushButton(f"{AppIcons.ACT_PLAY} Play")
         play_btn.setCursor(Qt.PointingHandCursor)
         play_btn.setStyleSheet(
             f"QPushButton {{ background: {theme.accent.name()}; color: {theme.bg.name()}; "
-            f"border: none; border-radius: {theme.radius_sm}px; padding: 5px 14px; "
-            f"font-weight: 600; font-size: 11px; }}"
+            f"border: none; border-radius: {theme.radius_sm}px; padding: 4px 12px; "
+            f"font-weight: 600; font-size: 12px; }}"
             f"QPushButton:hover {{ background: {theme.accent.lighter(110).name()}; }}"
         )
         play_btn.clicked.connect(lambda: self.play_clicked.emit(self.game.game_id))
@@ -361,30 +372,39 @@ class GameCard(QFrame):
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
         self.overlay_anim.start()
+        theme = self._theme
         # Elevate shadow for "lift" effect
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
-            theme = self._theme
-            self._shadow_effect.setBlurRadius(24)
-            self._shadow_effect.setOffset(0, 6)
+            self._shadow_effect.setBlurRadius(28)
+            self._shadow_effect.setOffset(0, 8)
             self._shadow_effect.setColor(QColor(
                 theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
                 theme.elevation_mid,
             ))
+        # Subtle upward lift via margin animation
+        if not is_reduced_motion():
+            self._hover_margin_anim = QPropertyAnimation(self, b"contentsMargins_top", self)
+            curr = self.contentsMargins()
+            self.setContentsMargins(curr.left(), max(0, curr.top() - 2), curr.right(), curr.bottom() + 2)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Backward)
         self.overlay_anim.start()
+        theme = self._theme
         # Reset shadow
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
-            theme = self._theme
             self._shadow_effect.setBlurRadius(16)
             self._shadow_effect.setOffset(0, 3)
             self._shadow_effect.setColor(QColor(
                 theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
                 theme.elevation_low,
             ))
+        # Reset lift
+        if not is_reduced_motion():
+            pad = theme.spacing_md if self.view_mode == "comfortable" else theme.spacing_sm
+            self.setContentsMargins(pad, pad, pad, pad)
         super().leaveEvent(event)
 
     def resizeEvent(self, event) -> None:

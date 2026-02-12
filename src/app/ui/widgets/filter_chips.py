@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QPushButton, QLabel, QScrollArea, QFrame
+    QWidget, QHBoxLayout, QPushButton, QLabel, QScrollArea, QFrame,
+    QGraphicsOpacityEffect,
 )
 from PySide6.QtGui import QColor
 
-from app.ui.theme import current_theme, filter_chip_style
+from app.ui.theme import current_theme, filter_chip_style, is_reduced_motion
 
 
 @dataclass
@@ -31,7 +32,7 @@ class FilterChipWidget(QPushButton):
         theme = current_theme()
 
         # Style as active chip with close indicator
-        self.setText(f"{chip.label} ×")
+        self.setText(f"{chip.label} \u00d7")
         self.setStyleSheet(
             f"QPushButton {{ {filter_chip_style(theme, active=True)} }} "
             f"QPushButton:hover {{ background: {theme.accent.lighter(115).name()}; }}"
@@ -39,6 +40,18 @@ class FilterChipWidget(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"Click to remove filter: {chip.label}")
         self.clicked.connect(lambda: self.removed.emit(chip.key))
+
+        # Fade-in animation
+        if not is_reduced_motion():
+            self._opacity_effect = QGraphicsOpacityEffect(self)
+            self.setGraphicsEffect(self._opacity_effect)
+            self._opacity_effect.setOpacity(0.0)
+            self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+            self._fade_anim.setDuration(180)
+            self._fade_anim.setStartValue(0.0)
+            self._fade_anim.setEndValue(1.0)
+            self._fade_anim.setEasingCurve(QEasingCurve.OutCubic)
+            self._fade_anim.start()
 
     @property
     def filter_key(self) -> str:
@@ -57,7 +70,7 @@ class FilterChipsBar(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(6)
+        layout.setSpacing(8)
 
         # Label
         self._label = QLabel("Filters:")
@@ -77,7 +90,7 @@ class FilterChipsBar(QWidget):
         self._chips_container = QWidget()
         self._chips_layout = QHBoxLayout(self._chips_container)
         self._chips_layout.setContentsMargins(0, 0, 0, 0)
-        self._chips_layout.setSpacing(6)
+        self._chips_layout.setSpacing(8)
         self._chips_layout.addStretch(1)
 
         self._scroll.setWidget(self._chips_container)

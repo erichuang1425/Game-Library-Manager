@@ -94,73 +94,73 @@ def _c(r: int, g: int, b: int, a: int = 255) -> QColor:
 THEMES: Dict[str, ThemeSpec] = {
     "dark": ThemeSpec(
         name="Dark",
-        bg=_c(20, 23, 30),
-        surface=_c(30, 34, 44),
-        surface_alt=_c(40, 45, 55),
-        card=_c(36, 42, 52),
-        card_border=_c(50, 56, 68),
-        card_hover=_c(80, 105, 130),
+        bg=_c(14, 16, 20),
+        surface=_c(24, 28, 36),
+        surface_alt=_c(36, 42, 52),
+        card=_c(32, 38, 48),
+        card_border=_c(48, 56, 70),
+        card_hover=_c(72, 100, 140),
         text=_c(235, 238, 245),
-        text_muted=_c(150, 158, 172),
-        accent=_c(92, 193, 255),
-        accent_alt=_c(255, 203, 92),
-        chip_bg=_c(52, 61, 75),
-        chip_border=_c(70, 83, 98),
-        focus=_c(92, 193, 255),
-        outline=_c(50, 56, 68),
-        shadow=_c(0, 0, 0, 150),
+        text_muted=_c(145, 155, 170),
+        accent=_c(100, 160, 255),
+        accent_alt=_c(255, 140, 120),
+        chip_bg=_c(48, 56, 70),
+        chip_border=_c(64, 76, 94),
+        focus=_c(100, 160, 255),
+        outline=_c(48, 56, 70),
+        shadow=_c(0, 0, 0, 160),
         status_backlog=_c(120, 170, 230),
         status_playing=_c(80, 210, 130),
-        status_finished=_c(255, 190, 70),
+        status_finished=_c(255, 200, 80),
         status_dropped=_c(220, 100, 80),
         success=_c(80, 210, 130),
-        warning=_c(255, 190, 70),
+        warning=_c(255, 200, 80),
         error=_c(230, 75, 60),
-        surface_raised=_c(44, 50, 62),
-        surface_sunken=_c(16, 18, 24),
-        header_bg=_c(24, 27, 35),
-        surface_overlay=_c(20, 23, 30, 200),
-        interactive_hover=_c(60, 70, 88),
-        interactive_active=_c(50, 58, 74),
-        interactive_muted=_c(45, 52, 64),
-        info=_c(92, 193, 255),
-        gradient_start=_c(24, 27, 35),
-        gradient_end=_c(36, 42, 56),
+        surface_raised=_c(42, 50, 62),
+        surface_sunken=_c(10, 12, 16),
+        header_bg=_c(18, 20, 26),
+        surface_overlay=_c(14, 16, 20, 210),
+        interactive_hover=_c(52, 62, 80),
+        interactive_active=_c(44, 52, 68),
+        interactive_muted=_c(38, 44, 56),
+        info=_c(100, 160, 255),
+        gradient_start=_c(18, 20, 26),
+        gradient_end=_c(30, 36, 48),
     ),
     "light": ThemeSpec(
         name="Light",
-        bg=_c(246, 249, 252),
-        surface=_c(255, 255, 255),
-        surface_alt=_c(240, 243, 248),
+        bg=_c(243, 245, 249),
+        surface=_c(249, 250, 253),
+        surface_alt=_c(237, 240, 246),
         card=_c(255, 255, 255),
-        card_border=_c(228, 232, 240),
-        card_hover=_c(190, 210, 240),
-        text=_c(28, 32, 38),
-        text_muted=_c(105, 115, 130),
-        accent=_c(41, 121, 255),
-        accent_alt=_c(255, 152, 0),
-        chip_bg=_c(235, 240, 248),
-        chip_border=_c(210, 218, 230),
-        focus=_c(41, 121, 255),
-        outline=_c(218, 224, 235),
-        shadow=_c(0, 0, 0, 55),
+        card_border=_c(224, 228, 238),
+        card_hover=_c(185, 208, 242),
+        text=_c(24, 28, 36),
+        text_muted=_c(100, 110, 128),
+        accent=_c(56, 120, 240),
+        accent_alt=_c(230, 90, 60),
+        chip_bg=_c(232, 237, 246),
+        chip_border=_c(208, 216, 230),
+        focus=_c(56, 120, 240),
+        outline=_c(214, 220, 232),
+        shadow=_c(0, 0, 0, 50),
         status_backlog=_c(60, 130, 220),
-        status_playing=_c(40, 180, 100),
-        status_finished=_c(230, 160, 20),
-        status_dropped=_c(210, 80, 60),
-        success=_c(40, 180, 100),
-        warning=_c(230, 160, 20),
-        error=_c(220, 60, 50),
+        status_playing=_c(36, 168, 92),
+        status_finished=_c(220, 152, 16),
+        status_dropped=_c(205, 72, 56),
+        success=_c(36, 168, 92),
+        warning=_c(220, 152, 16),
+        error=_c(215, 55, 45),
         surface_raised=_c(255, 255, 255),
-        surface_sunken=_c(234, 238, 244),
-        header_bg=_c(255, 255, 255),
-        surface_overlay=_c(246, 249, 252, 220),
-        interactive_hover=_c(230, 236, 245),
-        interactive_active=_c(218, 226, 238),
-        interactive_muted=_c(200, 208, 220),
-        info=_c(41, 121, 255),
-        gradient_start=_c(255, 255, 255),
-        gradient_end=_c(240, 243, 248),
+        surface_sunken=_c(230, 234, 242),
+        header_bg=_c(252, 253, 255),
+        surface_overlay=_c(243, 245, 249, 225),
+        interactive_hover=_c(226, 232, 244),
+        interactive_active=_c(214, 222, 238),
+        interactive_muted=_c(196, 204, 218),
+        info=_c(56, 120, 240),
+        gradient_start=_c(252, 253, 255),
+        gradient_end=_c(237, 240, 246),
     ),
     "neubrutalism": ThemeSpec(
         name="Neubrutalism",
@@ -169,12 +169,12 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_alt=_c(255, 255, 255),
         card=_c(255, 255, 255),
         card_border=_c(30, 30, 30),
-        card_hover=_c(255, 240, 150),
+        card_hover=_c(255, 245, 180),
         text=_c(20, 20, 20),
         text_muted=_c(60, 60, 60),
         accent=_c(255, 94, 91),
         accent_alt=_c(72, 133, 237),
-        chip_bg=_c(255, 255, 160),
+        chip_bg=_c(255, 252, 190),
         chip_border=_c(30, 30, 30),
         focus=_c(72, 133, 237),
         outline=_c(30, 30, 30),
@@ -190,8 +190,8 @@ THEMES: Dict[str, ThemeSpec] = {
         surface_sunken=_c(238, 238, 238),
         header_bg=_c(255, 255, 255),
         surface_overlay=_c(247, 247, 247, 230),
-        interactive_hover=_c(255, 240, 150),
-        interactive_active=_c(245, 230, 130),
+        interactive_hover=_c(255, 245, 180),
+        interactive_active=_c(248, 238, 160),
         interactive_muted=_c(220, 220, 220),
         info=_c(72, 133, 237),
         gradient_start=_c(255, 255, 255),
@@ -235,20 +235,20 @@ THEMES: Dict[str, ThemeSpec] = {
     "glassmorphism": ThemeSpec(
         name="Glassmorphism",
         bg=_c(12, 18, 30),
-        surface=_c(20, 28, 44, 180),
-        surface_alt=_c(28, 38, 58, 200),
-        card=_c(32, 46, 70, 210),
-        card_border=_c(92, 193, 255, 70),
-        card_hover=_c(92, 193, 255, 130),
+        surface=_c(20, 28, 44, 140),
+        surface_alt=_c(28, 38, 58, 160),
+        card=_c(32, 46, 70, 155),
+        card_border=_c(92, 193, 255, 60),
+        card_hover=_c(92, 193, 255, 110),
         text=_c(235, 242, 255),
         text_muted=_c(160, 180, 210),
         accent=_c(92, 193, 255),
         accent_alt=_c(255, 255, 255),
-        chip_bg=_c(92, 193, 255, 40),
-        chip_border=_c(92, 193, 255, 90),
+        chip_bg=_c(92, 193, 255, 35),
+        chip_border=_c(92, 193, 255, 75),
         focus=_c(92, 193, 255),
-        outline=_c(72, 120, 160, 80),
-        shadow=_c(0, 0, 0, 120),
+        outline=_c(72, 120, 160, 65),
+        shadow=_c(0, 0, 0, 100),
         status_backlog=_c(100, 180, 255),
         status_playing=_c(80, 230, 150),
         status_finished=_c(255, 200, 80),
@@ -256,13 +256,13 @@ THEMES: Dict[str, ThemeSpec] = {
         success=_c(80, 230, 150),
         warning=_c(255, 200, 80),
         error=_c(255, 90, 70),
-        surface_raised=_c(38, 54, 80, 220),
+        surface_raised=_c(38, 54, 80, 170),
         surface_sunken=_c(10, 14, 24),
-        header_bg=_c(16, 22, 36, 220),
-        surface_overlay=_c(12, 18, 30, 210),
-        interactive_hover=_c(40, 60, 90, 180),
-        interactive_active=_c(50, 70, 100, 200),
-        interactive_muted=_c(30, 44, 66, 160),
+        header_bg=_c(16, 22, 36, 175),
+        surface_overlay=_c(12, 18, 30, 180),
+        interactive_hover=_c(40, 60, 90, 145),
+        interactive_active=_c(50, 70, 100, 165),
+        interactive_muted=_c(30, 44, 66, 125),
         info=_c(92, 193, 255),
         gradient_start=_c(16, 22, 36),
         gradient_end=_c(24, 36, 56),
@@ -307,6 +307,76 @@ THEMES: Dict[str, ThemeSpec] = {
         radius_lg=8,
         radius_xl=10,
     ),
+    "nord": ThemeSpec(
+        name="Nord",
+        bg=_c(46, 52, 64),
+        surface=_c(59, 66, 82),
+        surface_alt=_c(67, 76, 94),
+        card=_c(59, 66, 82),
+        card_border=_c(76, 86, 106),
+        card_hover=_c(94, 129, 172),
+        text=_c(236, 239, 244),
+        text_muted=_c(168, 178, 196),
+        accent=_c(136, 192, 208),
+        accent_alt=_c(191, 97, 106),
+        chip_bg=_c(67, 76, 94),
+        chip_border=_c(76, 86, 106),
+        focus=_c(136, 192, 208),
+        outline=_c(76, 86, 106),
+        shadow=_c(0, 0, 0, 130),
+        status_backlog=_c(129, 161, 193),
+        status_playing=_c(163, 190, 140),
+        status_finished=_c(235, 203, 139),
+        status_dropped=_c(191, 97, 106),
+        success=_c(163, 190, 140),
+        warning=_c(235, 203, 139),
+        error=_c(191, 97, 106),
+        surface_raised=_c(67, 76, 94),
+        surface_sunken=_c(40, 46, 58),
+        header_bg=_c(52, 60, 74),
+        surface_overlay=_c(46, 52, 64, 215),
+        interactive_hover=_c(76, 86, 106),
+        interactive_active=_c(67, 76, 94),
+        interactive_muted=_c(59, 66, 82),
+        info=_c(129, 161, 193),
+        gradient_start=_c(52, 60, 74),
+        gradient_end=_c(59, 66, 82),
+    ),
+    "catppuccin": ThemeSpec(
+        name="Catppuccin Mocha",
+        bg=_c(30, 30, 46),
+        surface=_c(49, 50, 68),
+        surface_alt=_c(69, 71, 90),
+        card=_c(49, 50, 68),
+        card_border=_c(69, 71, 90),
+        card_hover=_c(137, 180, 250),
+        text=_c(205, 214, 244),
+        text_muted=_c(147, 153, 178),
+        accent=_c(203, 166, 247),
+        accent_alt=_c(250, 179, 135),
+        chip_bg=_c(69, 71, 90),
+        chip_border=_c(88, 91, 112),
+        focus=_c(203, 166, 247),
+        outline=_c(69, 71, 90),
+        shadow=_c(0, 0, 0, 140),
+        status_backlog=_c(137, 180, 250),
+        status_playing=_c(166, 227, 161),
+        status_finished=_c(249, 226, 175),
+        status_dropped=_c(243, 139, 168),
+        success=_c(166, 227, 161),
+        warning=_c(249, 226, 175),
+        error=_c(243, 139, 168),
+        surface_raised=_c(69, 71, 90),
+        surface_sunken=_c(24, 24, 37),
+        header_bg=_c(36, 36, 54),
+        surface_overlay=_c(30, 30, 46, 220),
+        interactive_hover=_c(88, 91, 112),
+        interactive_active=_c(69, 71, 90),
+        interactive_muted=_c(49, 50, 68),
+        info=_c(116, 199, 236),
+        gradient_start=_c(36, 36, 54),
+        gradient_end=_c(49, 50, 68),
+    ),
 }
 
 FONTS = {
@@ -316,7 +386,7 @@ FONTS = {
     "Consolas": "Consolas",
 }
 
-FONT_SCALES = {"small": 0.9, "default": 1.0, "large": 1.15}
+FONT_SCALES = {"small": 0.92, "default": 1.0, "large": 1.15}
 
 # Accessibility: reduced motion preference
 _reduced_motion: bool = False
@@ -353,7 +423,7 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
     pal.setColor(QPalette.ToolTipText, theme.text)
     app.setPalette(pal)
 
-    base_font = QFont(font_family or "Segoe UI", max(9, round(10 * scale)))
+    base_font = QFont(font_family or "Segoe UI", max(11, round(13 * scale)))
     app.setFont(base_font)
 
     # Expose theme to widgets
@@ -431,17 +501,25 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
     }}
     QScrollBar:vertical {{
         background: transparent;
-        width: 8px;
-        border-radius: 4px;
-        margin: 4px 2px;
+        width: 6px;
+        border-radius: 3px;
+        margin: 4px 1px;
+    }}
+    QScrollBar:vertical:hover {{
+        width: 10px;
+        border-radius: 5px;
     }}
     QScrollBar::handle:vertical {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},60);
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},40);
         border-radius: 3px;
         min-height: 40px;
     }}
     QScrollBar::handle:vertical:hover {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},120);
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},100);
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:vertical:pressed {{
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},140);
     }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
@@ -451,17 +529,25 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
     }}
     QScrollBar:horizontal {{
         background: transparent;
-        height: 8px;
-        border-radius: 4px;
-        margin: 2px 4px;
+        height: 6px;
+        border-radius: 3px;
+        margin: 1px 4px;
+    }}
+    QScrollBar:horizontal:hover {{
+        height: 10px;
+        border-radius: 5px;
     }}
     QScrollBar::handle:horizontal {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},60);
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},40);
         border-radius: 3px;
         min-width: 40px;
     }}
     QScrollBar::handle:horizontal:hover {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},120);
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},100);
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:horizontal:pressed {{
+        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},140);
     }}
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
         width: 0px;
@@ -560,9 +646,9 @@ def chip_style(theme: ThemeSpec, bg_color: QColor | None = None, active: bool = 
     return (
         f"background: {bg.name(QColor.HexArgb)}; "
         f"color: {text.name()}; "
-        f"padding: 2px 8px; "
+        f"padding: 3px 10px; "
         f"border-radius: {theme.radius_sm + 1}px; "
-        f"font-size: 11px; "
+        f"font-size: 12px; "
         f"border: 1px solid {border.name(QColor.HexArgb)};"
     )
 
@@ -596,7 +682,7 @@ def filter_chip_style(theme: ThemeSpec, active: bool = False, removable: bool = 
         f"color: {text.name()}; "
         f"padding: 4px 12px; "
         f"border-radius: {theme.radius_md}px; "
-        f"font-size: 12px; "
+        f"font-size: 13px; "
         f"font-weight: 500; "
         f"border: 1px solid {border.name(QColor.HexArgb)};"
     )
@@ -613,7 +699,7 @@ def primary_btn_style(theme: ThemeSpec) -> str:
         f"border: none; "
         f"border-radius: {theme.radius_md}px; "
         f"padding: 8px 20px; "
-        f"font-weight: 600; font-size: 13px; "
+        f"font-weight: 600; font-size: 14px; "
         f"}} "
         f"QPushButton:hover {{ background: {theme.accent.lighter(112).name()}; }} "
         f"QPushButton:pressed {{ background: {theme.accent.darker(110).name()}; }} "
@@ -631,7 +717,7 @@ def secondary_btn_style(theme: ThemeSpec) -> str:
         f"border: 1px solid {theme.accent.name()}; "
         f"border-radius: {theme.radius_md}px; "
         f"padding: 7px 16px; "
-        f"font-weight: 500; font-size: 12px; "
+        f"font-weight: 500; font-size: 13px; "
         f"}} "
         f"QPushButton:hover {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},25); }} "
         f"QPushButton:pressed {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},50); }} "
@@ -649,7 +735,7 @@ def ghost_btn_style(theme: ThemeSpec) -> str:
         f"border: none; "
         f"border-radius: {theme.radius_sm}px; "
         f"padding: 6px 10px; "
-        f"font-size: 12px; "
+        f"font-size: 13px; "
         f"}} "
         f"QPushButton:hover, QToolButton:hover {{ "
         f"color: {theme.text.name()}; "
@@ -669,7 +755,7 @@ def danger_btn_style(theme: ThemeSpec) -> str:
         f"border: 1px solid {err.name()}; "
         f"border-radius: {theme.radius_md}px; "
         f"padding: 7px 16px; "
-        f"font-weight: 500; font-size: 12px; "
+        f"font-weight: 500; font-size: 13px; "
         f"}} "
         f"QPushButton:hover {{ background: rgba({err.red()},{err.green()},{err.blue()},25); }} "
         f"QPushButton:pressed {{ background: rgba({err.red()},{err.green()},{err.blue()},50); }}"
@@ -689,7 +775,7 @@ def section_header_style(theme: ThemeSpec) -> str:
     """Style for section headers (uppercase, small, muted)."""
     return (
         f"color: {theme.text_muted.name()}; "
-        f"font-size: 10px; font-weight: 700; "
+        f"font-size: 11px; font-weight: 700; "
         f"letter-spacing: 1px; "
         f"padding: {theme.spacing_sm}px {theme.spacing_sm}px {theme.spacing_xs}px; "
         f"border: none; background: transparent;"
@@ -708,7 +794,7 @@ def status_color(theme: ThemeSpec, status: str) -> QColor:
 
 
 def sidebar_item_style(theme: ThemeSpec) -> str:
-    """Style for sidebar navigation items."""
+    """Style for sidebar navigation items with left accent bar on selection."""
     return f"""
         QListWidget {{
             background: transparent;
@@ -720,13 +806,18 @@ def sidebar_item_style(theme: ThemeSpec) -> str:
             border-radius: {theme.radius_sm}px;
             margin: 2px {theme.spacing_xs}px;
             border: none;
+            border-left: 3px solid transparent;
+            font-size: 13px;
         }}
         QListWidget::item:selected {{
-            background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},30);
+            background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},25);
             color: {theme.accent.name()};
+            border-left: 3px solid {theme.accent.name()};
+            font-weight: 600;
         }}
         QListWidget::item:hover:!selected {{
             background: {theme.surface_alt.name(QColor.HexArgb)};
+            border-left: 3px solid rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},12);
         }}
     """
 
@@ -736,7 +827,7 @@ def collapsible_header_style(theme: ThemeSpec) -> str:
     return (
         f"QPushButton {{ "
         f"color: {theme.text_muted.name()}; "
-        f"font-size: 10px; font-weight: 700; "
+        f"font-size: 11px; font-weight: 700; "
         f"letter-spacing: 1px; "
         f"text-align: left; "
         f"padding: {theme.spacing_sm}px {theme.spacing_sm}px {theme.spacing_xs}px; "
