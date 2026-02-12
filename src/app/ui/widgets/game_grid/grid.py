@@ -206,11 +206,26 @@ class GameGrid(QWidget):
             QTimer.singleShot(100, self._render)
             return
 
-        # Responsive-ish: choose columns based on width
+        # Responsive proportional sizing: compute card width from viewport
+        theme = current_theme()
         width = max(240, self.scroll.viewport().width())
-        card_w = 260 if self._view_mode == "comfortable" else 200
-        cols = max(1, width // card_w)
-        self.container.setMinimumWidth(card_w)
+        preferred_w = 260 if self._view_mode == "comfortable" else 200
+        min_w = theme.card_min_width  # 200
+        max_w = theme.card_max_width  # 320
+        gap = theme.grid_gap
+        padding = theme.grid_padding * 2
+
+        # Calculate columns that fit, then distribute width evenly
+        available = width - padding
+        cols = max(1, (available + gap) // (preferred_w + gap))
+        card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
+
+        # If cards would be too narrow, reduce columns
+        if card_w < min_w and cols > 1:
+            cols -= 1
+            card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
+
+        self.container.setMinimumWidth(min_w)
 
         chip_level = "medium"
         if card_w < 230:
@@ -291,9 +306,13 @@ class GameGrid(QWidget):
         self._clear_grid()
         self._skeleton_cards = []
 
+        theme = current_theme()
         width = max(240, self.scroll.viewport().width())
-        card_w = 260 if self._view_mode == "comfortable" else 200
-        cols = max(1, width // card_w)
+        preferred_w = 260 if self._view_mode == "comfortable" else 200
+        gap = theme.grid_gap
+        padding = theme.grid_padding * 2
+        available = width - padding
+        cols = max(1, (available + gap) // (preferred_w + gap))
 
         for idx in range(count):
             skeleton = SkeletonCard(view_mode=self._view_mode, parent=self.container)
@@ -454,9 +473,13 @@ class GameGrid(QWidget):
 
     def _get_column_count(self) -> int:
         """Calculate current number of columns based on viewport width."""
+        theme = current_theme()
         width = max(240, self.scroll.viewport().width())
-        card_w = 260 if self._view_mode == "comfortable" else 200
-        return max(1, width // card_w)
+        preferred_w = 260 if self._view_mode == "comfortable" else 200
+        gap = theme.grid_gap
+        padding = theme.grid_padding * 2
+        available = width - padding
+        return max(1, (available + gap) // (preferred_w + gap))
 
     def _move_focus(self, delta: int, cols: int) -> None:
         """Move focus by delta positions."""

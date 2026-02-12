@@ -25,6 +25,7 @@ from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.theme import (
     apply_theme, current_theme, header_bar_style, gradient_header_style,
     primary_btn_style, secondary_btn_style, ghost_btn_style,
+    scaled_toolbar_height,
 )
 from app.ui.icons import AppIcons
 
@@ -210,9 +211,9 @@ class MainWindow(
             splitter.setSizes([220, 820, 0 if not self._details_visible else 340])
 
     def _build_header_bar(self, outer: QVBoxLayout, theme) -> None:
-        """Build the slim branded header bar."""
+        """Build the slim branded header bar, scaled for DPI and font size."""
         header = QFrame()
-        header.setFixedHeight(theme.toolbar_height)
+        header.setFixedHeight(scaled_toolbar_height())
         header.setStyleSheet(
             f"QFrame {{ {gradient_header_style(theme)} }}"
             f"QFrame QLabel {{ background: transparent; border: none; }}"
@@ -595,9 +596,10 @@ class MainWindow(
         return details
 
     def _build_footer_bar(self, outer: QVBoxLayout, theme) -> None:
-        """Build the custom status/footer bar."""
+        """Build the custom status/footer bar, scaled for DPI and font size."""
         footer = QFrame()
-        footer.setFixedHeight(28)
+        # Scale footer proportionally (base 28px relative to 48px toolbar)
+        footer.setFixedHeight(max(24, round(scaled_toolbar_height() * 28 / 48)))
         footer.setStyleSheet(
             f"QFrame {{ "
             f"background: {theme.surface.name(QColor.HexArgb)}; "

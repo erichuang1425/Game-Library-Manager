@@ -18,9 +18,12 @@ if TYPE_CHECKING:
     from .window import MainWindow
 
 
-# Breakpoint thresholds
+# Breakpoint thresholds with hysteresis to prevent flickering at boundaries.
+# When crossing a boundary in one direction, require crossing back by the
+# hysteresis amount before switching again.
 _BP_COMPACT = 900
 _BP_DEFAULT = 1200
+_BP_HYSTERESIS = 40  # px buffer zone
 
 
 class UIMixin:
@@ -107,11 +110,20 @@ class UIMixin:
 
     def _on_splitter_moved(self: "MainWindow", *_args) -> None:
         sizes = self._splitter.sizes()
-        if self._details_visible and not self._focus_mode and len(sizes) == 3 and sizes[2] < 260:
-            delta = 260 - sizes[2]
-            sizes[2] = 260
-            sizes[1] = max(400, sizes[1] - delta)
-            self._splitter.setSizes(sizes)
+        if self._details_visible and not self._focus_mode and len(sizes) == 3:
+            min_grid = 480
+            min_details = 260
+            # Priority: grid always gets minimum viable width first
+            if sizes[1] < min_grid and sizes[2] > min_details:
+                deficit = min_grid - sizes[1]
+                sizes[2] = max(min_details, sizes[2] - deficit)
+                sizes[1] = min_grid
+                self._splitter.setSizes(sizes)
+            elif sizes[2] < min_details:
+                delta = min_details - sizes[2]
+                sizes[2] = min_details
+                sizes[1] = max(min_grid, sizes[1] - delta)
+                self._splitter.setSizes(sizes)
         self._settings["splitter_sizes"] = sizes
         self._persist_settings()
 
@@ -152,11 +164,17 @@ class UIMixin:
     def _apply_details_visibility(
         self: "MainWindow", initial: bool = False, animate: bool = False,
     ) -> None:
+        sidebar_w = self._splitter.sizes()[0] if len(self._splitter.sizes()) == 3 else 220
         if self._details_visible and not self._focus_mode:
             self._details_widget.show()
-            target = [220, max(600, self.width() - 560), 340]
+            # Priority-based: allocate sidebar first, details second, grid gets rest
+            # Grid must have at least 480px; details target 340px but shrinks if needed
+            remaining = self.width() - sidebar_w
+            details_w = min(340, max(260, remaining - 480))
+            grid_w = max(480, remaining - details_w)
+            target = [sidebar_w, grid_w, details_w]
         else:
-            target = [220, max(700, self.width() - 220), 0]
+            target = [sidebar_w, max(700, self.width() - sidebar_w), 0]
 
         if animate and not is_reduced_motion() and not initial:
             self._animate_splitter(target)
@@ -231,9 +249,25 @@ class UIMixin:
             self._bump_table_font(self.updates.table, base=10 + font_delta)
             self._bump_table_font(self.health.table, base=10 + font_delta)
 
-        # Breakpoint-based layout adjustments
-        bp = "compact" if width < _BP_COMPACT else ("default" if width <= _BP_DEFAULT else "expanded")
+        # Breakpoint-based layout adjustments with hysteresis to prevent
+        # flickering when the window width hovers near a breakpoint boundary.
         prev_bp = getattr(self, "_current_breakpoint", None)
+        if prev_bp == "compact":
+            # Must cross above compact threshold + hysteresis to leave compact
+            bp = "compact" if width < _BP_COMPACT + _BP_HYSTERESIS else (
+                "default" if width <= _BP_DEFAULT else "expanded"
+            )
+        elif prev_bp == "expanded":
+            # Must cross below expanded threshold - hysteresis to leave expanded
+            bp = "expanded" if width > _BP_DEFAULT - _BP_HYSTERESIS else (
+                "compact" if width < _BP_COMPACT else "default"
+            )
+        else:
+            # Default / initial: use standard thresholds
+            bp = "compact" if width < _BP_COMPACT else (
+                "default" if width <= _BP_DEFAULT else "expanded"
+            )
+
         if bp == prev_bp:
             return
         self._current_breakpoint = bp
@@ -242,19 +276,19 @@ class UIMixin:
             if hasattr(self, 'sidebar') and not self.sidebar.is_collapsed():
                 self.sidebar.set_collapsed(True, animate=True)
             if self._details_visible and not self._focus_mode:
-                self._details_widget.hide()
+                self._apply_details_visibility(animate=True)
             self._set_toolbar_compact(True)
         elif bp == "default":
             if hasattr(self, 'sidebar') and self.sidebar.is_collapsed():
                 self.sidebar.set_collapsed(False, animate=True)
             if self._details_visible and not self._focus_mode:
-                self._details_widget.show()
+                self._apply_details_visibility(animate=True)
             self._set_toolbar_compact(False)
         else:  # expanded
             if hasattr(self, 'sidebar') and self.sidebar.is_collapsed():
                 self.sidebar.set_collapsed(False, animate=True)
             if self._details_visible and not self._focus_mode:
-                self._details_widget.show()
+                self._apply_details_visibility(animate=True)
             self._set_toolbar_compact(False)
 
     def _set_toolbar_compact(self: "MainWindow", compact: bool) -> None:

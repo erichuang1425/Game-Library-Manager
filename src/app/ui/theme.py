@@ -588,6 +588,28 @@ def current_theme() -> ThemeSpec:
     return spec if isinstance(spec, ThemeSpec) else THEMES["dark"]
 
 
+def scaled_toolbar_height() -> int:
+    """Compute toolbar height scaled by the current font scale and system DPI.
+
+    The base toolbar_height (48px) is designed for 96 DPI at default font scale.
+    This function adjusts it proportionally so the header remains comfortable
+    at non-standard DPI settings or when the user selects a larger font.
+
+    Returns:
+        Scaled toolbar height in pixels.
+    """
+    app = QApplication.instance()
+    base = current_theme().toolbar_height  # typically 48
+    if not app:
+        return base
+    font_scale_name = app.property("font_scale") or "default"
+    font_scale = FONT_SCALES.get(font_scale_name, 1.0)
+    # Account for system DPI (96 is the baseline)
+    screen = app.primaryScreen()
+    dpi_scale = screen.logicalDotsPerInch() / 96.0 if screen else 1.0
+    return max(36, round(base * font_scale * dpi_scale))
+
+
 def shadow_style(theme: ThemeSpec, elevation: str = "mid") -> str:
     """Generate a box-shadow-like border effect for Qt widgets.
 
