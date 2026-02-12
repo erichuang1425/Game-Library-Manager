@@ -177,6 +177,7 @@ class ActionsMixin:
 
             merged, stats = merge_imported_games(self._all_games, games, strategy)
             self._all_games = merged
+            self._rebuild_search_cache()
 
             # Merge collections if any
             if collections:

@@ -93,14 +93,19 @@ src/app/
 | Sprint 3 | Modularization Part 1 | ✅ Complete |
 | Sprint 4 | Modularization Part 2 | ✅ Complete |
 
-### Current Sprint: Sprint 5 (Performance)
+### Current Sprint: Sprint 5 (Performance) - ✅ Complete
 
 | Task | Status | Notes |
 |------|--------|-------|
 | PERF-001: Fuzzy matching index | ✅ Done | TitleIndex in title_matcher.py |
-| PERF-002: Search haystack caching | ✅ Done | SearchCache in filter_utils.py |
-| PERF-003: Virtual scrolling | ⏳ Pending | GameGrid needs implementation |
+| PERF-002: Search haystack caching | ✅ Done | SearchCache in filter_utils.py, integrated into FilterMixin |
+| PERF-003: Chunked progressive rendering | ✅ Done | GameGrid renders visible cards first, remaining in batches |
 | PERF-004: LRU cache bounds | ✅ Done | BoundedCache in http_utils.py, used by update_checker.py |
+| PERF-005: Search debouncing | ✅ Done | 300ms debounce on search input prevents per-keystroke rebuilds |
+| PERF-006: Ambient color cache | ✅ Done | get_cached_dominant_color() in color_extractor.py |
+| PERF-007: Icon cache size reduction | ✅ Done | _BASE_ICON_SIZE 1024→512 (75% memory reduction) |
+| PERF-008: Lazy overlay construction | ✅ Done | Overlay built on first hover, not during card init |
+| PERF-009: Render coalescing | ✅ Done | set_games() uses 16ms timer to batch rapid calls |
 
 ### Next Sprint: Sprint 6 (Architecture)
 
@@ -197,11 +202,14 @@ python src/tests/test_version_parser.py
 
 ## Recent Changes (This Session)
 
-1. **Fixed P1-001**: Added error handling with fallback to `save_library_bundle()` in json_store.py
-2. **Fixed P1-010**: Added initial progress emission in http_utils.py `download_file()` for fast downloads
-3. **Implemented PERF-004**: Added `BoundedCache` class to http_utils.py, applied to update_checker.py
-4. **Split bulk_archive_import_dialog.py**: Extracted workers to bulk_archive_workers.py (70 lines) and PasswordManagerWidget to widgets/password_manager.py (130 lines)
-5. **Created AGENT.md**: This document for context preservation
+1. **PERF-005: Search debouncing** — 300ms debounce timer on search input (window.py, filter_mixin.py)
+2. **PERF-002 integration: SearchCache wired into FilterMixin** — Cached haystacks used instead of rebuilding per search (filter_mixin.py)
+3. **PERF-006: Ambient color cache** — Path-keyed cache prevents redundant pixel scans (color_extractor.py, card.py)
+4. **PERF-007: Icon cache base size 1024→512** — 75% memory reduction, no visual quality loss (icon_service.py)
+5. **PERF-009: Render coalescing** — set_games() batches rapid calls via 16ms timer (grid.py)
+6. **PERF-003: Chunked progressive rendering** — Renders visible cards first, remaining in batches of 10 (grid.py)
+7. **PERF-008: Lazy overlay construction** — Hover overlay deferred to first enterEvent (card.py)
+8. **Cache rebuild hooks** — _rebuild_search_cache() called on scan, import, delete (scan_mixin, actions_mixin, game_ops_mixin, dialog_mixin)
 
 ---
 

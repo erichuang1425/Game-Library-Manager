@@ -4,7 +4,7 @@ from typing import List, Optional
 import os
 import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
@@ -115,6 +115,7 @@ class MainWindow(
         self._log.info("data_paths %s", kv(library=library_json_path(), settings=settings_json_path()))
 
         self._filtered: List[Game] = list(self._all_games)
+        self._init_search_cache()
         self._selected_game_id: Optional[str] = None
         self._ignored_health: dict[str, set[str]] = {}
 
@@ -256,7 +257,12 @@ class MainWindow(
             f"background: {theme.surface.name(QColor.HexArgb)}; "
             f"}}"
         )
-        self.search.textChanged.connect(self._apply_search)
+        # Debounce search input to avoid grid rebuilds on every keystroke
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(300)
+        self._search_debounce.timeout.connect(self._apply_search)
+        self.search.textChanged.connect(self._on_search_text_changed)
         hbox.addWidget(self.search, 2)
         hbox.addStretch(1)
 

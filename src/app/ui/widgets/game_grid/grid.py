@@ -101,6 +101,11 @@ class GameGrid(QWidget):
         self._rate = RateLimiter()
         self._card_rate = RateLimiter()
         self._skeleton_cards: List[SkeletonCard] = []
+        # Chunked rendering state: render visible cards first, then add remaining in batches
+        self._chunk_timer: Optional[QTimer] = None
+        self._chunk_index = 0
+        self._chunk_cols = 1
+        self._chunk_chip_level = "medium"
         _log.info("grid_init %s", kv(view_mode=self._view_mode, type_scale=self._type_scale))
 
     def set_games(self, games: List[Game]) -> None:
@@ -110,7 +115,13 @@ class GameGrid(QWidget):
         if self._rate.allow("set_games", interval_ms=500):
             _log.info("set_games %s", kv(count=len(self._games)))
         self._update_empty_state_visibility()
-        self._render()
+        # Coalesce rapid set_games calls into a single deferred render
+        if not hasattr(self, '_set_games_timer'):
+            self._set_games_timer = QTimer(self)
+            self._set_games_timer.setSingleShot(True)
+            self._set_games_timer.setInterval(16)  # ~1 frame
+            self._set_games_timer.timeout.connect(self._render)
+        self._set_games_timer.start()
 
     def set_view_mode(self, mode: str) -> None:
         if mode not in ("comfortable", "compact"):
@@ -195,8 +206,35 @@ class GameGrid(QWidget):
                 self._render_reason = "pending_rerun"
                 QTimer.singleShot(0, self._render)
 
+    def _compute_layout(self):
+        """Compute columns, card width, and chip level from current viewport."""
+        theme = current_theme()
+        width = max(240, self.scroll.viewport().width())
+        preferred_w = 260 if self._view_mode == "comfortable" else 200
+        min_w = theme.card_min_width  # 200
+        max_w = theme.card_max_width  # 320
+        gap = theme.grid_gap
+        padding = theme.grid_padding * 2
+
+        available = width - padding
+        cols = max(1, (available + gap) // (preferred_w + gap))
+        card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
+
+        if card_w < min_w and cols > 1:
+            cols -= 1
+            card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
+
+        chip_level = "medium"
+        if card_w < 230:
+            chip_level = "narrow"
+        elif card_w > 280:
+            chip_level = "wide"
+
+        return cols, card_w, chip_level
+
     def _render_inner(self) -> None:
         start = time.perf_counter()
+        self._stop_chunk_timer()
         self._clear_grid()
 
         viewport = self.scroll.viewport().size()
@@ -206,86 +244,117 @@ class GameGrid(QWidget):
             QTimer.singleShot(100, self._render)
             return
 
-        # Responsive proportional sizing: compute card width from viewport
+        cols, card_w, chip_level = self._compute_layout()
         theme = current_theme()
-        width = max(240, self.scroll.viewport().width())
-        preferred_w = 260 if self._view_mode == "comfortable" else 200
-        min_w = theme.card_min_width  # 200
-        max_w = theme.card_max_width  # 320
-        gap = theme.grid_gap
-        padding = theme.grid_padding * 2
-
-        # Calculate columns that fit, then distribute width evenly
-        available = width - padding
-        cols = max(1, (available + gap) // (preferred_w + gap))
-        card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
-
-        # If cards would be too narrow, reduce columns
-        if card_w < min_w and cols > 1:
-            cols -= 1
-            card_w = max(min_w, min(max_w, (available - gap * (cols - 1)) // cols))
-
-        self.container.setMinimumWidth(min_w)
-
-        chip_level = "medium"
-        if card_w < 230:
-            chip_level = "narrow"
-        elif card_w > 280:
-            chip_level = "wide"
+        self.container.setMinimumWidth(theme.card_min_width)
 
         _log.debug(
             "render_layout %s",
-            kv(width=width, height=viewport.height(), card_w=card_w, cols=cols, chip_level=chip_level, games=len(self._games)),
+            kv(width=viewport.width(), height=viewport.height(), card_w=card_w, cols=cols, chip_level=chip_level, games=len(self._games)),
         )
 
-        for idx, g in enumerate(self._games):
-            try:
-                card = GameCard(g, view_mode=self._view_mode, parent=self.container, type_scale=self._type_scale, chip_level=chip_level, multi_select_mode=self._multi_select_mode)
-            except Exception:
-                _log.exception("card_build_failed %s", kv(game_id=getattr(g, "game_id", "unknown"), title=getattr(g, "title", "unknown")))
-                continue
-            card.context_action.connect(self.context_action.emit)
-            card.clicked.connect(self.game_selected.emit)
-            card.play_clicked.connect(self.game_play.emit)
-            card.status_clicked.connect(self.status_filter_requested.emit)
-            card.updates_clicked.connect(self.updates_requested.emit)
-            card.rating_changed.connect(self.rating_changed.emit)
-            card.tag_clicked.connect(self.tag_filter_requested.emit)
-            card.selection_toggled.connect(self._on_card_selection_toggled)
+        # Estimate how many rows fit in the viewport for the initial batch.
+        # Card height is ~300px comfortable, ~200px compact. Add buffer rows.
+        est_card_h = 300 if self._view_mode == "comfortable" else 200
+        visible_rows = max(2, (viewport.height() // est_card_h) + 2)
+        initial_count = min(len(self._games), visible_rows * cols)
 
-            # Restore selection state if card was previously selected
-            if g.game_id in self._selected_game_ids:
-                card.set_selected(True)
+        # Render the first visible batch synchronously
+        reason = self._render_reason or "unknown"
+        for idx in range(initial_count):
+            self._add_card_at(idx, cols, chip_level, animate=(idx < 20 and reason in ("set_games", "init")))
 
-            row = idx // cols
-            col = idx % cols
-            try:
-                self.grid.addWidget(card, row, col)
-            except Exception:
-                _log.exception("add_widget_failed %s", kv(row=row, col=col, game_id=getattr(g, "game_id", "unknown")))
-                card.setParent(None)
-                continue
-
-            # Staggered entrance animation (only for first ~20 visible cards to avoid performance issues)
-            if idx < 20 and self._render_reason in ("set_games", "init"):
-                card.fade_in(delay_ms=idx * 25)
-
-            if self._card_rate.allow(f"card_added:{g.game_id}", 800):
-                _log.debug("card_added %s", kv(game_id=g.game_id, row=row, col=col))
-
-        # push cards to top-left
-        self.grid.setRowStretch((len(self._games) // cols) + 1, 1)
+        # Push cards to top-left
+        total_rows = (len(self._games) + cols - 1) // cols
+        self.grid.setRowStretch(total_rows, 1)
         for c in range(cols):
             self.grid.setColumnStretch(c, 1)
+
         duration = (time.perf_counter() - start) * 1000
-        _log.info("render_inner_done %s", kv(cards=len(self._games), cols=cols, duration_ms=round(duration, 1)))
-        # orphan check
-        for idx in range(self.grid.count()):
-            w = self.grid.itemAt(idx).widget()
-            if isinstance(w, GameCard) and w.parent() is None:
-                _log.warning("orphan GameCard detected: %s", getattr(w.game, "title", "unknown"))
-        if self.grid.count() == 0 and self._games:
-            _log.warning("grid_empty_after_render %s", kv(expected=len(self._games)))
+        _log.info("render_inner_done %s", kv(
+            initial=initial_count, total=len(self._games), cols=cols,
+            duration_ms=round(duration, 1),
+        ))
+
+        # Schedule remaining cards in chunks if there are more
+        if initial_count < len(self._games):
+            self._chunk_index = initial_count
+            self._chunk_cols = cols
+            self._chunk_chip_level = chip_level
+            self._start_chunk_timer()
+
+    def _add_card_at(self, idx: int, cols: int, chip_level: str, animate: bool = False) -> Optional[GameCard]:
+        """Create and add a single GameCard at the given index."""
+        g = self._games[idx]
+        try:
+            card = GameCard(
+                g, view_mode=self._view_mode, parent=self.container,
+                type_scale=self._type_scale, chip_level=chip_level,
+                multi_select_mode=self._multi_select_mode,
+            )
+        except Exception:
+            _log.exception("card_build_failed %s", kv(game_id=getattr(g, "game_id", "unknown"), title=getattr(g, "title", "unknown")))
+            return None
+        card.context_action.connect(self.context_action.emit)
+        card.clicked.connect(self.game_selected.emit)
+        card.play_clicked.connect(self.game_play.emit)
+        card.status_clicked.connect(self.status_filter_requested.emit)
+        card.updates_clicked.connect(self.updates_requested.emit)
+        card.rating_changed.connect(self.rating_changed.emit)
+        card.tag_clicked.connect(self.tag_filter_requested.emit)
+        card.selection_toggled.connect(self._on_card_selection_toggled)
+
+        if g.game_id in self._selected_game_ids:
+            card.set_selected(True)
+
+        row = idx // cols
+        col = idx % cols
+        try:
+            self.grid.addWidget(card, row, col)
+        except Exception:
+            _log.exception("add_widget_failed %s", kv(row=row, col=col, game_id=getattr(g, "game_id", "unknown")))
+            card.setParent(None)
+            return None
+
+        if animate:
+            card.fade_in(delay_ms=(idx % 20) * 25)
+        return card
+
+    def _start_chunk_timer(self) -> None:
+        """Start timer to progressively render remaining cards in batches."""
+        if self._chunk_timer is None:
+            self._chunk_timer = QTimer(self)
+            self._chunk_timer.setInterval(8)  # ~120fps budget, add a batch per tick
+            self._chunk_timer.timeout.connect(self._render_next_chunk)
+        self._chunk_timer.start()
+
+    def _stop_chunk_timer(self) -> None:
+        """Stop any in-progress chunked rendering."""
+        if self._chunk_timer is not None:
+            self._chunk_timer.stop()
+        self._chunk_index = 0
+
+    def _render_next_chunk(self) -> None:
+        """Render the next batch of cards. Called by the chunk timer."""
+        if not isValid(self) or not isValid(self.container):
+            self._stop_chunk_timer()
+            return
+        # If a new render was requested, abort chunked rendering
+        if self._render_pending:
+            self._stop_chunk_timer()
+            return
+
+        CHUNK_SIZE = 10
+        end = min(self._chunk_index + CHUNK_SIZE, len(self._games))
+
+        for idx in range(self._chunk_index, end):
+            self._add_card_at(idx, self._chunk_cols, self._chunk_chip_level)
+
+        self._chunk_index = end
+        if self._chunk_index >= len(self._games):
+            self._stop_chunk_timer()
+            if self._rate.allow("chunk_complete", 500):
+                _log.info("chunk_render_complete %s", kv(total=len(self._games)))
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
