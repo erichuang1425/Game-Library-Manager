@@ -50,13 +50,13 @@ class DetailsPanel(QWidget):
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
-        layout.setContentsMargins(0, 0, 0, theme.spacing_md)
+        layout.setContentsMargins(theme.spacing_md, theme.spacing_md, theme.spacing_md, theme.spacing_lg)
         layout.setSpacing(theme.spacing_sm)
 
         # == Title + subtitle ==
         self.title = QLabel("Select a game")
         self.title.setStyleSheet(
-            f"font-size: 18px; font-weight: 700; color: {theme.text.name()}; "
+            f"font-size: 20px; font-weight: 700; color: {theme.text.name()}; "
             f"background: transparent; border: none;"
         )
         self.title.setWordWrap(True)
@@ -64,14 +64,14 @@ class DetailsPanel(QWidget):
 
         self.subtitle = QLabel("")
         self.subtitle.setStyleSheet(
-            f"font-size: 11px; color: {theme.text_muted.name()}; "
+            f"font-size: 12px; color: {theme.text_muted.name()}; "
             f"background: transparent; border: none;"
         )
         layout.addWidget(self.subtitle)
 
         self.hint = QLabel("")
         self.hint.setStyleSheet(
-            f"color: {theme.accent.name()}; font-size: 11px; font-weight: 500; "
+            f"color: {theme.accent.name()}; font-size: 12px; font-weight: 500; "
             f"background: transparent; border: none;"
         )
         self.hint.setWordWrap(True)
@@ -89,20 +89,28 @@ class DetailsPanel(QWidget):
         self.play_btn.clicked.connect(self._emit_play)
         layout.addWidget(self.play_btn)
 
-        layout.addSpacing(theme.spacing_sm)
+        layout.addSpacing(theme.spacing_lg)
 
-        # == Section: Status & Rating ==
+        # == Section: Status & Rating (styled container) ==
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("STATUS & RATING", theme))
 
-        sr_row = QHBoxLayout()
-        sr_row.setSpacing(theme.spacing_sm)
+        sr_container = QFrame()
+        sr_container.setStyleSheet(
+            f"QFrame {{ background: {theme.surface_alt.name(QColor.HexArgb)}; "
+            f"border-radius: {theme.radius_sm}px; border: none; "
+            f"padding: {theme.spacing_sm}px; }}"
+        )
+        sr_inner = QHBoxLayout(sr_container)
+        sr_inner.setContentsMargins(theme.spacing_sm, theme.spacing_sm, theme.spacing_sm, theme.spacing_sm)
+        sr_inner.setSpacing(theme.spacing_sm)
 
         self.status = QComboBox()
         self.status.addItems(["backlog", "playing", "finished", "dropped"])
         self.status.setEnabled(False)
         self.status.currentTextChanged.connect(self._on_changed)
         self.status.setMinimumWidth(100)
-        sr_row.addWidget(self.status, 1)
+        sr_inner.addWidget(self.status, 1)
 
         self.rating = QComboBox()
         self.rating.addItem("\u2014  Unrated")
@@ -112,11 +120,13 @@ class DetailsPanel(QWidget):
         self.rating.setEnabled(False)
         self.rating.currentIndexChanged.connect(self._on_changed)
         self.rating.setMinimumWidth(120)
-        sr_row.addWidget(self.rating, 1)
+        sr_inner.addWidget(self.rating, 1)
 
-        layout.addLayout(sr_row)
+        layout.addWidget(sr_container)
 
         # == Section: Tags ==
+        layout.addSpacing(theme.spacing_md)
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("TAGS", theme))
         self.tags = QLineEdit()
         self.tags.setPlaceholderText("Tags (comma separated)")
@@ -125,6 +135,8 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.tags)
 
         # == Section: Notes ==
+        layout.addSpacing(theme.spacing_md)
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("NOTES", theme))
         self.notes = QTextEdit()
         self.notes.setPlaceholderText("Short review or notes\u2026")
@@ -135,6 +147,8 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.notes)
 
         # == Section: Source ==
+        layout.addSpacing(theme.spacing_md)
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("SOURCE", theme))
 
         src_row = QHBoxLayout()
@@ -155,7 +169,7 @@ class DetailsPanel(QWidget):
         ver_row.setSpacing(theme.spacing_sm)
         iv_lbl = QLabel("Installed")
         iv_lbl.setStyleSheet(
-            f"color: {theme.text_muted.name()}; font-size: 10px; "
+            f"color: {theme.text_muted.name()}; font-size: 11px; "
             f"background: transparent; border: none;"
         )
         self.installed_ver = QLineEdit()
@@ -168,20 +182,22 @@ class DetailsPanel(QWidget):
 
         self.source_ver = QLabel("Source: \u2014")
         self.source_ver.setStyleSheet(
-            f"color: {theme.text_muted.name()}; font-size: 10px; "
+            f"color: {theme.text_muted.name()}; font-size: 11px; "
             f"background: transparent; border: none;"
         )
         ver_row.addWidget(self.source_ver, 1)
         layout.addLayout(ver_row)
 
         # == Section: Archives ==
+        layout.addSpacing(theme.spacing_md)
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("ARCHIVES", theme))
 
         arch_row = QHBoxLayout()
         arch_row.setSpacing(theme.spacing_xs)
         af_lbl = QLabel("Folder")
         af_lbl.setStyleSheet(
-            f"color: {theme.text_muted.name()}; font-size: 10px; "
+            f"color: {theme.text_muted.name()}; font-size: 11px; "
             f"background: transparent; border: none;"
         )
         self.archive_folder = QLineEdit()
@@ -207,7 +223,7 @@ class DetailsPanel(QWidget):
         comp_row.setSpacing(theme.spacing_xs)
         ca_lbl = QLabel("Archive")
         ca_lbl.setStyleSheet(
-            f"color: {theme.text_muted.name()}; font-size: 10px; "
+            f"color: {theme.text_muted.name()}; font-size: 11px; "
             f"background: transparent; border: none;"
         )
         self.compressed_path = QLineEdit()
@@ -230,18 +246,20 @@ class DetailsPanel(QWidget):
         layout.addLayout(comp_row)
 
         # == Section: Info ==
+        layout.addSpacing(theme.spacing_md)
+        layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("INFO", theme))
         self.launcher_info = QLabel("")
         self.launcher_info.setStyleSheet(
-            f"font-size: 10px; color: {theme.text_muted.name()}; "
-            f"background: transparent; border: none; line-height: 1.4;"
+            f"font-size: 11px; color: {theme.text_muted.name()}; "
+            f"background: transparent; border: none; line-height: 1.5;"
         )
         self.launcher_info.setWordWrap(True)
         layout.addWidget(self.launcher_info)
 
         self.last_played = QLabel("")
         self.last_played.setStyleSheet(
-            f"font-size: 10px; color: {theme.text_muted.name()}; "
+            f"font-size: 11px; color: {theme.text_muted.name()}; "
             f"background: transparent; border: none;"
         )
         layout.addWidget(self.last_played)
@@ -250,8 +268,7 @@ class DetailsPanel(QWidget):
 
         # Register section widgets for collapsible toggling
         # Each layout/widget added after a section header belongs to that section
-        self._register_section_widget("STATUS & RATING", self.status)
-        self._register_section_widget("STATUS & RATING", self.rating)
+        self._register_section_widget("STATUS & RATING", sr_container)
         self._register_section_widget("TAGS", self.tags)
         self._register_section_widget("NOTES", self.notes)
         self._register_section_widget("SOURCE", self.source_url)
@@ -269,6 +286,17 @@ class DetailsPanel(QWidget):
 
         scroll.setWidget(inner)
         outer.addWidget(scroll)
+
+    def _section_divider(self, theme) -> QFrame:
+        """Create a subtle horizontal divider between sections."""
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Plain)
+        line.setFixedHeight(1)
+        line.setStyleSheet(
+            f"background: {theme.outline.name(QColor.HexArgb)}; border: none;"
+        )
+        return line
 
     def _section_header(self, text: str, theme) -> QPushButton:
         """Create a collapsible section header."""

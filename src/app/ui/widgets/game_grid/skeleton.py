@@ -79,7 +79,7 @@ class SkeletonCard(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(pad, pad, pad, pad)
-        layout.setSpacing(6 if view_mode == "comfortable" else 4)
+        layout.setSpacing(8 if view_mode == "comfortable" else 4)
 
         base = theme.surface_alt
         highlight = QColor(
@@ -124,7 +124,7 @@ class SkeletonCard(QFrame):
         # Skeleton tag chips row (only in comfortable mode)
         if view_mode == "comfortable":
             chips_row = QHBoxLayout()
-            chips_row.setContentsMargins(0, 2, 0, 0)
+            chips_row.setContentsMargins(0, 4, 0, 0)
             chips_row.setSpacing(4)
             for w in (60, 48, 36):
                 chip = ShimmerFrame()

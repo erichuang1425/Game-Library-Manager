@@ -54,7 +54,7 @@ class LibrarySidebar(QWidget):
         header.setContentsMargins(theme.spacing_lg, theme.spacing_sm, theme.spacing_md, theme.spacing_md)
         self._title_label = QLabel("Library")
         self._title_label.setStyleSheet(
-            f"font-size: 16px; font-weight: 700; color: {theme.text.name()}; "
+            f"font-size: 18px; font-weight: 700; color: {theme.text.name()}; "
             f"background: transparent; border: none;"
         )
         header.addWidget(self._title_label)
@@ -95,7 +95,7 @@ class LibrarySidebar(QWidget):
         # Version label
         self._ver_label = QLabel("v4.0")
         self._ver_label.setStyleSheet(
-            f"color: {theme.text_muted.name()}; font-size: 9px; "
+            f"color: {theme.text_muted.name()}; font-size: 10px; "
             f"padding: {theme.spacing_xs}px {theme.spacing_lg}px; "
             f"background: transparent; border: none;"
         )
@@ -265,11 +265,11 @@ class LibrarySidebar(QWidget):
         item = QListWidgetItem(f"  {text}")
         item.setFlags(Qt.NoItemFlags)
         font = item.font()
-        font.setPointSize(8)
+        font.setPointSize(9)
         font.setWeight(QFont.Bold)
         item.setFont(font)
         item.setForeground(theme.text_muted)
-        item.setSizeHint(item.sizeHint().__class__(item.sizeHint().width(), 32))
+        item.setSizeHint(item.sizeHint().__class__(item.sizeHint().width(), 36))
         self.list.addItem(item)
 
     def _add_nav_item(
@@ -282,7 +282,7 @@ class LibrarySidebar(QWidget):
         item = QListWidgetItem(elided)
         item.setToolTip(f"{label} ({count})" if count else label)
         item.setData(Qt.UserRole, key)
-        item.setSizeHint(item.sizeHint().__class__(item.sizeHint().width(), 36))
+        item.setSizeHint(item.sizeHint().__class__(item.sizeHint().width(), 38))
         self.list.addItem(item)
 
     def _add_icon_item(self, icon: str, label: str, count: int, key: str) -> None:
@@ -291,7 +291,7 @@ class LibrarySidebar(QWidget):
         item.setTextAlignment(Qt.AlignCenter)
         item.setToolTip(f"{label} ({count})" if count else label)
         item.setData(Qt.UserRole, key)
-        item.setSizeHint(item.sizeHint().__class__(self._collapsed_width - 8, 36))
+        item.setSizeHint(item.sizeHint().__class__(self._collapsed_width - 8, 38))
         self.list.addItem(item)
 
     def _collection_count(self, coll: Collection) -> int:

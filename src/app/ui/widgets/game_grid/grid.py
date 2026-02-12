@@ -392,7 +392,7 @@ class GameGrid(QWidget):
         )
         layout.addWidget(desc)
 
-        layout.addSpacing(20)
+        layout.addSpacing(24)
 
         # Action buttons
         btn_row = QHBoxLayout()
