@@ -57,7 +57,8 @@ class LibrarySidebar(QWidget):
             f"font-size: 18px; font-weight: 700; color: {theme.text.name()}; "
             f"background: transparent; border: none;"
         )
-        header.addWidget(self._title_label)
+        self._title_label.setMinimumWidth(0)
+        header.addWidget(self._title_label, 1)
         header.addStretch(1)
 
         # Collapse toggle button
@@ -87,6 +88,7 @@ class LibrarySidebar(QWidget):
         self.new_btn.setStyleSheet(ghost_btn_style(theme))
         self.new_btn.setCursor(Qt.PointingHandCursor)
         self.new_btn.setToolTip("Create a new collection")
+        self.new_btn.setMinimumWidth(0)
         self.new_btn.clicked.connect(lambda: self.new_collection_requested.emit())
         btn_row.addWidget(self.new_btn)
         btn_row.addStretch(1)
@@ -223,19 +225,34 @@ class LibrarySidebar(QWidget):
 
         target_width = self._collapsed_width if collapsed else self._expanded_width
         if animate and not is_reduced_motion():
+            # Set minimum width to collapsed width for smooth animation in both directions
+            self.setMinimumWidth(self._collapsed_width)
             self._width_anim.stop()
             self._width_anim.setStartValue(self.maximumWidth())
             self._width_anim.setEndValue(target_width)
+            self._width_anim.finished.connect(
+                lambda: self._on_collapse_anim_finished(collapsed)
+            )
             self._width_anim.start()
         else:
             self.setMaximumWidth(target_width)
-            self.setMinimumWidth(self._collapsed_width if collapsed else self._expanded_width)
+            self.setMinimumWidth(target_width)
 
         # Repopulate with collapsed/expanded items
         key = self.current_key() or "all"
         all_count = len(self._games) if self._games else 0
         self.populate(all_count, 0, 0, self._collections, key)
         self.collapse_toggled.emit(collapsed)
+
+    def _on_collapse_anim_finished(self, collapsed: bool) -> None:
+        """Finalize min/max width after collapse animation completes."""
+        try:
+            self._width_anim.finished.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        target = self._collapsed_width if collapsed else self._expanded_width
+        self.setMinimumWidth(target)
+        self.setMaximumWidth(self._theme.sidebar_width_max if not collapsed else target)
 
     def select_by_index(self, index: int) -> None:
         """Select a sidebar item by index (for keyboard shortcuts)."""
@@ -331,6 +348,25 @@ class LibrarySidebar(QWidget):
             self.rename_collection_requested.emit(coll_id)
         elif chosen == delete_act:
             self.delete_collection_requested.emit(coll_id)
+
+    def resizeEvent(self, event) -> None:
+        """Refresh item labels on resize to re-elide text for current width."""
+        super().resizeEvent(event)
+        if not self._collapsed:
+            # Update elision for current width
+            fm = self.list.fontMetrics()
+            max_w = max(80, self.list.viewport().width() - 48)
+            for i in range(self.list.count()):
+                item = self.list.item(i)
+                if not item:
+                    continue
+                tooltip = item.toolTip()
+                key = item.data(Qt.UserRole)
+                if not key or not tooltip:
+                    continue  # Skip section headers
+                elided = fm.elidedText(tooltip, Qt.ElideRight, max_w)
+                if elided != item.text():
+                    item.setText(elided)
 
     # ---- Hover expand for collapsed mode ----
     def enterEvent(self, event) -> None:
