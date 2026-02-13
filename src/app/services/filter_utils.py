@@ -13,19 +13,20 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from app.models import Game
+from app.models.enums import QuickFilter, SortMode
 from app.services.version_parser import parse_version, compare_versions, CompareResult
 
 
 @dataclass
 class FilterConfig:
     """Configuration for filtering games."""
-    quick_filter: str = "all"  # "all", "missing", "updates", "source"
-    status_filter: str = "all"  # "all", "backlog", "playing", "finished", "dropped"
-    confidence_filter: str = "all"  # "all", "high", "medium", "low"
-    type_filter: str = "all"  # "all", "lnk", "url", "html"
+    quick_filter: str = QuickFilter.ALL
+    status_filter: str = "all"
+    confidence_filter: str = "all"
+    type_filter: str = "all"
     tag_filter: Optional[str] = None
     search_text: str = ""
-    sort_by: str = "title"  # "title", "last_played", "rating", "launch_count", "last_checked"
+    sort_by: str = SortMode.TITLE
 
 
 class SearchCache:
@@ -279,13 +280,13 @@ def apply_quick_filter(games: List[Game], quick_filter: str) -> List[Game]:
     Returns:
         Filtered list of games
     """
-    if quick_filter == "all":
+    if quick_filter == QuickFilter.ALL:
         return games
-    elif quick_filter == "missing":
+    elif quick_filter == QuickFilter.MISSING:
         return [g for g in games if is_game_missing(g)]
-    elif quick_filter == "updates":
+    elif quick_filter == QuickFilter.UPDATES:
         return [g for g in games if game_needs_update(g)]
-    elif quick_filter == "source":
+    elif quick_filter == QuickFilter.SOURCE:
         return [g for g in games if g.source_url]
     return games
 
@@ -357,13 +358,13 @@ def sort_games(games: List[Game], sort_by: str) -> List[Game]:
     Returns:
         Sorted list of games
     """
-    if sort_by == "last_played":
+    if sort_by == SortMode.LAST_PLAYED:
         return sorted(games, key=lambda g: g.last_played or datetime.min, reverse=True)
-    elif sort_by == "rating":
+    elif sort_by == SortMode.RATING:
         return sorted(games, key=lambda g: g.rating if g.rating is not None else -1, reverse=True)
-    elif sort_by == "launch_count":
+    elif sort_by == SortMode.LAUNCH_COUNT:
         return sorted(games, key=lambda g: g.launch_count or 0, reverse=True)
-    elif sort_by == "last_checked":
+    elif sort_by == SortMode.LAST_CHECKED:
         return sorted(games, key=lambda g: g.source_checked_at or datetime.min, reverse=True)
     else:
         return sorted(games, key=lambda g: g.title.lower())
