@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.models import Game, Collection
+from app.events import EventBus, AppEvent
 from app.repositories import JsonGameRepository
 from app.storage import (
     library_json_path, settings_json_path,
@@ -122,6 +123,12 @@ class MainWindow(
         self._init_search_cache()
         self._selected_game_id: Optional[str] = None
         self._ignored_health: dict[str, set[str]] = {}
+
+        # Event bus for decoupled inter-component communication
+        self._bus = EventBus()
+        self._bus.on(AppEvent.GAMES_CHANGED, lambda _: self._rebuild_search_cache())
+        self._bus.on(AppEvent.GAMES_CHANGED, lambda _: self._apply_search())
+        self._bus.on(AppEvent.GAME_EDITED, lambda gid: self._search_cache.invalidate(gid) if hasattr(self, '_search_cache') else None)
 
         if self._theme == "custom" and "custom_theme" in self._settings:
             self._restore_custom_theme()

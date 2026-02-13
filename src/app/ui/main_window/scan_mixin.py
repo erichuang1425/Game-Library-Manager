@@ -179,7 +179,6 @@ class ScanMixin:
 
         self._all_games = merge_scanned_into_library(self._all_games, games)
         self._rebuild_game_index()
-        self._rebuild_search_cache()
         after = len(self._all_games)
         delta = after - before
         new_count = len(scanned_keys - before_keys)
@@ -188,9 +187,13 @@ class ScanMixin:
         # Prime icons only for items touched by this scan
         to_prime = [g for g in self._all_games if (self._game_key(g) in scanned_keys) and (not getattr(g, "icon_upscaled", False))]
         icons_refreshed = self._prime_icons(to_prime)
-        self._apply_search()
         self._persist_library()
         self._flush_save()  # immediate write after scan — don't defer bulk changes
+
+        # Notify all subscribers that games have changed
+        from app.events import AppEvent
+        self._bus.emit(AppEvent.SCAN_COMPLETE, {"new": new_count, "updated": updated_count})
+        self._bus.emit(AppEvent.GAMES_CHANGED)
         self._refresh_scan_views()
 
         msg_lines = [
