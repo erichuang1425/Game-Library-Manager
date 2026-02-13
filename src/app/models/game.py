@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
+from app.models.enums import GameStatus, Confidence
+
 
 @dataclass
 class Game:
@@ -19,7 +21,7 @@ class Game:
     backup_working_dir: str = ""         # resolved working directory from .lnk
 
     # Library metadata
-    status: str = "backlog"              # backlog | playing | finished | dropped
+    status: str = GameStatus.BACKLOG
     rating: Optional[int] = None         # 1..10
     tags: List[str] = field(default_factory=list)
     last_played: Optional[datetime] = None
@@ -27,7 +29,7 @@ class Game:
     notes: str = ""
 
     # Quality flags
-    confidence: str = "medium"           # high | medium | low
+    confidence: str = Confidence.MEDIUM
 
     # Source / update tracking
     source_url: str = ""                 # source page (e.g., f95zone thread)
