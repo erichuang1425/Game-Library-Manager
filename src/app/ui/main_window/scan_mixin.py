@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog, QFileDialog
 
 from app.models import Game
-from app.storage import settings_json_path, save_settings
+from app.storage import settings_json_path
 from app.services import find_duplicate_shortcuts_in_root, move_duplicates_to_quarantine, merge_scanned_into_library, pixmap_for_game
 from app.ui.dialogs import ScanWorker
 from app.ui.widgets import show_success, show_error
@@ -110,7 +110,7 @@ class ScanMixin:
             return
         self._root_folder = folder
         self._settings["root_folder"] = folder
-        save_settings(settings_json_path(), self._settings)
+        self._persist_settings()
         self.statusBar().showMessage(f"Root folder set: {folder}", 5000)
 
     def _start_scan_thread(self: "MainWindow", root_folder: str) -> None:

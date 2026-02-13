@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QProgressBar, QGraphicsOpacityEffect, QMessageBox,
 )
 
-from app.storage import settings_json_path, save_settings
 from app.ui.theme import apply_theme, is_reduced_motion
 from app.ui.dialogs import PreferencesDialog
 from app.logging_utils import kv
@@ -139,7 +138,7 @@ class UIMixin:
         self._apply_quick_filter_buttons()
 
     def _persist_settings(self: "MainWindow") -> None:
-        save_settings(settings_json_path(), self._settings)
+        self._config.save()
 
     def _save_updates_prefs(self: "MainWindow") -> None:
         self._settings["updates_filter"] = self.updates._filter_mode
