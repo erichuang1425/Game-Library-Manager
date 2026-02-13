@@ -1,7 +1,7 @@
 # Agent Context Document
 
 > **Purpose:** Preserves context for AI agents to reduce exploration time and save context window.
-> **Last Updated:** 2026-02-03
+> **Last Updated:** 2026-02-13
 > **Project:** Game Library Manager v4
 
 ---
@@ -10,8 +10,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Lines of Code | ~21,250 |
-| Files | 97 Python files |
+| Lines of Code | ~24,500 |
+| Files | 108 Python files |
+| Tests | 225 (pytest) |
 | Framework | PySide6 (Qt) |
 | Platform | Windows |
 | Entry Point | `src/main.py` |
@@ -22,24 +23,20 @@
 
 ```
 src/app/
+├── config.py               # [ARCH-003] Type-safe AppConfig dataclass
+├── events.py               # [ARCH-002] EventBus pub/sub system
 ├── models/
-│   ├── game.py              # Game dataclass (core entity)
-│   └── collection.py        # Collection dataclass
+│   ├── game.py              # Game dataclass (core entity, uses enum defaults)
+│   ├── collection.py        # Collection dataclass
+│   └── enums.py             # [TASK-4] GameStatus, SortMode, QuickFilter, etc.
+├── repositories/            # [ARCH-001] Data access abstraction
+│   ├── game_repository.py   # GameRepository ABC
+│   └── json_game_repository.py  # JSON-backed implementation
 ├── services/
 │   ├── archive/             # [MOD-003] Archive extraction (5 modules)
-│   │   ├── models.py        # ArchiveFormat, ExtractionResult, ScannedArchive
-│   │   ├── detection.py     # Format detection, multipart handling
-│   │   ├── passwords.py     # Password management
-│   │   ├── extraction.py    # ZIP/RAR/7z extraction
-│   │   └── utils.py         # Scanning, title parsing
 │   ├── download/            # [MOD-004] Download manager (3 modules)
-│   │   ├── models.py        # DownloadStatus, DownloadItem, DownloadHistory
-│   │   ├── worker.py        # DownloadWorker QThread
-│   │   └── manager.py       # DownloadManager with queue
 │   ├── host_handlers/       # Download site handlers (7+ handlers)
-│   │   ├── base.py          # HostHandler ABC
-│   │   ├── mega.py, gofile.py, pixeldrain.py, mediafire.py, ...
-│   ├── http_utils.py        # [DUP-001] Centralized HTTP (USER_AGENT, download_file)
+│   ├── http_utils.py        # [DUP-001] Centralized HTTP
 │   ├── title_matcher.py     # [DUP-002] Fuzzy matching (TitleIndex)
 │   ├── filter_utils.py      # [SPRINT-3] Search/filter utilities (SearchCache)
 │   ├── f95_api.py           # F95zone thread parsing (703 lines - needs split)
@@ -51,30 +48,25 @@ src/app/
 │   └── paths.py             # Storage path utilities
 └── ui/
     ├── main_window/         # [MOD-001] Main window package (10 mixins)
-    │   ├── window.py        # Core MainWindow (~576 lines)
-    │   ├── scan_mixin.py    # Shortcut scanning
+    │   ├── window.py        # Core MainWindow (uses AppConfig, EventBus, Repository)
+    │   ├── scan_mixin.py    # Shortcut scanning (emits GAMES_CHANGED event)
     │   ├── update_mixin.py  # Version checking
     │   ├── filter_mixin.py  # Search and filtering
     │   ├── dialog_mixin.py  # Dialog management
-    │   ├── collection_mixin.py  # Collection CRUD
-    │   ├── game_ops_mixin.py    # Game operations
+    │   ├── collection_mixin.py  # Collection CRUD (uses repo.save())
+    │   ├── game_ops_mixin.py    # Game operations (debounced saves, O(1) lookups)
     │   ├── actions_mixin.py     # Shortcuts, export/import
-    │   ├── ui_mixin.py          # UI helpers, startup
+    │   ├── ui_mixin.py          # UI helpers, startup (uses config.save())
     │   └── batch_mixin.py       # Multi-select operations
     ├── widgets/
     │   ├── game_grid/       # [MOD-002] Game grid package (4 modules)
     │   │   ├── grid.py      # GameGrid layout (~570 lines)
-    │   │   ├── card.py      # GameCard widget (~589 lines)
+    │   │   ├── card.py      # GameCard widget (persists dominant_color_hex)
     │   │   ├── skeleton.py  # Loading skeleton
     │   │   └── display_utils.py  # Status label, stars, time
-    │   ├── details_panel.py # Game details sidebar
-    │   ├── downloads_panel.py
     │   └── ... (8+ widgets)
     ├── dialogs/             # 8+ dialog implementations
-    │   ├── bulk_archive_import_dialog.py  # 751 lines - NEEDS SPLIT
-    │   └── ...
     ├── workers/             # Background threads
-    │   └── base_worker.py   # [DUP-003] BaseWorker, CancellableWorker
     └── theme.py, typography.py
 ```
 
@@ -92,27 +84,51 @@ src/app/
 | Sprint 2 | Code Deduplication | ✅ Complete |
 | Sprint 3 | Modularization Part 1 | ✅ Complete |
 | Sprint 4 | Modularization Part 2 | ✅ Complete |
+| Sprint 5 | Performance | ✅ Complete |
 
-### Current Sprint: Sprint 5 (Performance) - ✅ Complete
+### Current Sprint: Sprint 6 (Architecture + Testing) — In Progress
 
 | Task | Status | Notes |
 |------|--------|-------|
-| PERF-001: Fuzzy matching index | ✅ Done | TitleIndex in title_matcher.py |
-| PERF-002: Search haystack caching | ✅ Done | SearchCache in filter_utils.py, integrated into FilterMixin |
-| PERF-003: Chunked progressive rendering | ✅ Done | GameGrid renders visible cards first, remaining in batches |
-| PERF-004: LRU cache bounds | ✅ Done | BoundedCache in http_utils.py, used by update_checker.py |
-| PERF-005: Search debouncing | ✅ Done | 300ms debounce on search input prevents per-keystroke rebuilds |
-| PERF-006: Ambient color cache | ✅ Done | get_cached_dominant_color() in color_extractor.py |
-| PERF-007: Icon cache size reduction | ✅ Done | _BASE_ICON_SIZE 1024→512 (75% memory reduction) |
-| PERF-008: Lazy overlay construction | ✅ Done | Overlay built on first hover, not during card init |
-| PERF-009: Render coalescing | ✅ Done | set_games() uses 16ms timer to batch rapid calls |
+| Task 1: Debounced Library Saves | ✅ Done | 500ms QTimer coalesces writes; closeEvent flushes |
+| Task 2: Persist Dominant Colors | ✅ Done | `dominant_color_hex` field on Game; card.py checks persisted first |
+| Task 3: Game Lookup Index | ✅ Done | `_games_by_id` Dict for O(1) lookups; `_rebuild_game_index()` |
+| Task 4: Enums (str, Enum) | ✅ Done | `enums.py`: GameStatus, SortMode, QuickFilter, Confidence, etc. |
+| Task 5: Repository Pattern (ARCH-001) | ✅ Done | `GameRepository` ABC + `JsonGameRepository`; injected into MainWindow |
+| Task 6: Event Bus (ARCH-002) | ✅ Done | `EventBus` + `AppEvent` enum; scan_mixin emits GAMES_CHANGED |
+| Task 7: Configuration Mgmt (ARCH-003) | ✅ Done | `AppConfig` dataclass; dict-compat interface for mixins |
+| Task 8: pytest Migration + Tests | ✅ Done | 225 tests passing; 7 new test files + pyproject.toml |
+| Task 9: Keyboard Navigation | ⬜ Pending | |
+| Task 10: Virtual Scrolling | ⬜ Pending | |
+| Task 11: Inline Grid Interactions | ⬜ Pending | |
+| Task 12: Drag-and-Drop to Collections | ⬜ Pending | |
+| Task 13: Named Views | ⬜ Pending | |
+| Task 14: Custom Exception Hierarchy | ⬜ Pending | |
+| Task 15: Split Oversized Files | ⬜ Pending | |
+| Task 16: CI Pipeline | ⬜ Pending | |
 
-### Next Sprint: Sprint 6 (Architecture)
+### New Architecture (Sprint 6)
 
-- ARCH-001: Repository pattern for data access
-- ARCH-002: Event bus for decoupled communication
-- ARCH-003: Configuration management system
-- Test coverage: 0.2% → 60% target
+```python
+# Repository pattern: data access via self._repo
+self._repo = JsonGameRepository(library_json_path())
+self._all_games = self._repo.get_all()
+g = self._repo.get_by_id(game_id)  # O(1) lookup
+
+# Event bus: decoupled communication
+self._bus = EventBus()
+self._bus.on(AppEvent.GAMES_CHANGED, handler)
+self._bus.emit(AppEvent.GAMES_CHANGED)
+
+# AppConfig: typed settings
+self._config = AppConfig.load()
+self._config.theme  # IDE autocompletion
+self._config.save()
+
+# Debounced saves: _persist_library() → 500ms timer → _save_bundle()
+self._persist_library()  # queues write
+self._flush_save()       # immediate write (scan, close)
+```
 
 ---
 
@@ -122,52 +138,51 @@ src/app/
 |------|-------|--------|----------|
 | `f95_api.py` | 703 | <500 | MEDIUM |
 | `f95_auth.py` | 679 | <500 | MEDIUM |
-| `bulk_archive_import_dialog.py` | 626 | <500 | LOW (reduced from 751) |
+| `bulk_archive_import_dialog.py` | 626 | <500 | LOW |
 | `smart_download.py` | 626 | <500 | LOW |
 | `game_grid/card.py` | 589 | <500 | LOW |
-| `main_window/window.py` | 576 | <500 | LOW (core) |
+| `main_window/window.py` | ~730 | <500 | LOW (core) |
 
 ---
 
 ## Key Patterns
 
+### Repository Pattern (new)
+```python
+from app.repositories import JsonGameRepository
+repo = JsonGameRepository(path)
+games = repo.get_all()
+game = repo.get_by_id("id")
+repo.add(game)
+repo.remove("id")
+repo.save()
+```
+
+### Event Bus (new)
+```python
+from app.events import EventBus, AppEvent
+bus = EventBus()
+bus.on(AppEvent.GAMES_CHANGED, lambda data: handle(data))
+bus.emit(AppEvent.GAMES_CHANGED, optional_data)
+```
+
+### Enums (new)
+```python
+from app.models.enums import GameStatus, SortMode, QuickFilter
+g.status == GameStatus.PLAYING  # also == "playing"
+```
+
 ### Mixin Pattern (main_window/)
 ```python
 class MainWindow(QMainWindow, ScanMixin, UpdateMixin, FilterMixin, ...):
     # Core window inherits from multiple mixins
-    # Each mixin provides specific functionality
 ```
 
 ### Shared Utilities
 ```python
-# HTTP: Always use http_utils
 from app.services.http_utils import USER_AGENT, create_request, download_file
-
-# Title matching: Use title_matcher
 from app.services.title_matcher import TitleIndex, normalize_title
-
-# Filtering: Use filter_utils
 from app.services.filter_utils import FilterConfig, filter_and_sort_games
-```
-
-### Storage with Fallback
-```python
-# json_store.py pattern: primary path → temp fallback on error
-try:
-    path.write_text(data)
-except Exception:
-    fb_path = temp_data_dir() / path.name
-    fb_path.write_text(data)
-    _warn_fallback(fb_path)
-```
-
-### Worker Pattern
-```python
-# Use BaseWorker from ui/workers/base_worker.py
-class MyWorker(BaseWorker):
-    def do_work(self) -> Any:
-        # Override this, not run()
-        return result
 ```
 
 ---
@@ -175,14 +190,8 @@ class MyWorker(BaseWorker):
 ## Known Issues / TODOs
 
 1. **Multi-click link handling incomplete** (smart_download.py:368)
-   - TODO: Needs JavaScript execution for full support
-
-2. **Test coverage minimal** (~0.2%)
-   - Location: `src/tests/` (only 3 test files)
-   - Framework: Simple assertions (not pytest)
-
-3. **F95 API module too large** (703 lines)
-   - Should split: URL normalization, parsing, link extraction
+2. **F95 API module too large** (703 lines) — needs split (Task 15)
+3. **No CI pipeline** — Task 16
 
 ---
 
@@ -192,24 +201,25 @@ class MyWorker(BaseWorker):
 # Run application
 python src/main.py
 
-# Run tests (basic)
-python src/tests/guardrails_check.py
-python src/tests/test_json_store_dt.py
-python src/tests/test_version_parser.py
+# Run full test suite (225 tests)
+PYTHONPATH=src python -m pytest src/tests/ -v
+
+# Run with coverage
+PYTHONPATH=src python -m pytest src/tests/ --cov=src/app --cov-report=term-missing
 ```
 
 ---
 
-## Recent Changes (This Session)
+## Recent Changes (This Session — Sprint 6)
 
-1. **PERF-005: Search debouncing** — 300ms debounce timer on search input (window.py, filter_mixin.py)
-2. **PERF-002 integration: SearchCache wired into FilterMixin** — Cached haystacks used instead of rebuilding per search (filter_mixin.py)
-3. **PERF-006: Ambient color cache** — Path-keyed cache prevents redundant pixel scans (color_extractor.py, card.py)
-4. **PERF-007: Icon cache base size 1024→512** — 75% memory reduction, no visual quality loss (icon_service.py)
-5. **PERF-009: Render coalescing** — set_games() batches rapid calls via 16ms timer (grid.py)
-6. **PERF-003: Chunked progressive rendering** — Renders visible cards first, remaining in batches of 10 (grid.py)
-7. **PERF-008: Lazy overlay construction** — Hover overlay deferred to first enterEvent (card.py)
-8. **Cache rebuild hooks** — _rebuild_search_cache() called on scan, import, delete (scan_mixin, actions_mixin, game_ops_mixin, dialog_mixin)
+1. **Task 1: Debounced saves** — 500ms QTimer coalesces _persist_library() calls (window.py, game_ops_mixin.py, scan_mixin.py)
+2. **Task 2: Persist dominant colors** — `dominant_color_hex` field on Game; card.py checks persisted hex before pixel extraction
+3. **Task 3: Game lookup index** — `_games_by_id` Dict[str, Game] for O(1) lookups; replaces linear scans in all mixins
+4. **Task 4: Enums** — `enums.py` with GameStatus, SortMode, QuickFilter, Confidence, ShortcutType, ViewMode; backward-compat (str, Enum)
+5. **Task 5: Repository pattern** — `GameRepository` ABC + `JsonGameRepository`; _save_bundle() delegates to repo.save()
+6. **Task 6: Event bus** — `EventBus` + `AppEvent` enum; scan_mixin emits events instead of cross-mixin calls
+7. **Task 7: AppConfig** — Type-safe dataclass replacing 25+ .get() calls; dict-compat interface for gradual migration
+8. **Task 8: pytest suite** — 225 tests (98 new): filter_utils, game_model, version_parser, title_matcher, events, config, repository
 
 ---
 
@@ -229,21 +239,20 @@ python src/tests/test_version_parser.py
 ## Import Structure
 
 ```python
-# Public API via services/__init__.py
+# New modules (Sprint 6)
+from app.config import AppConfig
+from app.events import EventBus, AppEvent
+from app.repositories import JsonGameRepository, GameRepository
+from app.models.enums import GameStatus, SortMode, QuickFilter, Confidence
+
+# Existing public API via services/__init__.py
 from app.services import (
-    # Core
     load_fake_games, scan_shortcut_root, launch_game,
-    # HTTP
     USER_AGENT, create_request, download_file,
-    # Matching
     TitleIndex, normalize_title, calculate_similarity,
-    # Filtering
     FilterConfig, filter_and_sort_games,
-    # F95
     F95AuthManager, get_auth_manager,
-    # Archive
     extract_archive, scan_for_archives,
-    # Download
     DownloadManager, get_download_manager,
 )
 ```
@@ -257,6 +266,9 @@ from app.services import (
 3. **Logging via logging_utils** - `get_logger("module_name")`
 4. **Thread safety** - QMutex/QMutexLocker for shared state
 5. **Error propagation** - Custom exceptions with context
+6. **Debounced I/O** - Library saves coalesced via QTimer
+7. **Decoupled components** - EventBus for inter-mixin communication
+8. **Testable architecture** - Repository pattern enables mock data access
 
 ---
 
