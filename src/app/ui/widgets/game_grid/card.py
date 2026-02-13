@@ -534,6 +534,11 @@ class GameCard(QFrame):
 
     def _extract_ambient_color(self) -> None:
         """Extract dominant color from icon for ambient accent effects (cached per path)."""
+        # Use persisted color if available (avoids pixel extraction on restart)
+        if self.game.dominant_color_hex:
+            self._ambient_color = QColor(self.game.dominant_color_hex)
+            return
+
         pm = self.icon_label.pixmap()
         if pm and not pm.isNull():
             icon_path = best_icon_path(self.game)
@@ -541,6 +546,10 @@ class GameCard(QFrame):
                 self._ambient_color = get_cached_dominant_color(icon_path, pm)
             else:
                 self._ambient_color = extract_dominant_color(pm)
+
+            # Persist extracted color back to model for future launches
+            if self._ambient_color and self._ambient_color.isValid():
+                self.game.dominant_color_hex = self._ambient_color.name()
 
     def _apply_ambient_overlay(self) -> None:
         """Apply ambient color tint to overlay sheet on hover."""
