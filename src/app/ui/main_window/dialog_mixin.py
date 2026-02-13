@@ -242,13 +242,14 @@ class DialogMixin:
         def on_import_complete(new_games):
             """Handle newly imported games."""
             for game in new_games:
-                existing = next((g for g in self._all_games if g.game_id == game.game_id), None)
+                existing = self._get_game(game.game_id)
                 if existing:
                     idx = self._all_games.index(existing)
                     self._all_games[idx] = game
                 else:
                     self._all_games.append(game)
 
+            self._rebuild_game_index()
             self._save_bundle()
             self._rebuild_search_cache()
             self._apply_search()
