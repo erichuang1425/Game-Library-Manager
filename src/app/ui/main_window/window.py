@@ -12,9 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from app.models import Game, Collection
+from app.repositories import JsonGameRepository
 from app.storage import (
     library_json_path, settings_json_path,
-    load_settings, load_library_bundle,
+    load_settings,
 )
 from app.logging_utils import connect_safe, get_logger, kv, RateLimiter, wrap_slot
 from app.ui.widgets import (
@@ -102,10 +103,12 @@ class MainWindow(
         self._font_family: str = self._settings.get("font_family", "Segoe UI")
         self._font_scale: str = self._settings.get("font_scale", "default")
 
-        # Load library
+        # Load library via repository
         lib_start = time.perf_counter()
-        self._all_games, self._collections = load_library_bundle(library_json_path())
-        self._games_by_id: Dict[str, Game] = {g.game_id: g for g in self._all_games}
+        self._repo = JsonGameRepository(library_json_path())
+        self._all_games = self._repo.get_all()
+        self._collections = self._repo.get_collections()
+        self._games_by_id: Dict[str, Game] = self._repo.index
         self._active_collection_id: Optional[str] = None
         self._log.info(
             "startup_library_loaded %s",

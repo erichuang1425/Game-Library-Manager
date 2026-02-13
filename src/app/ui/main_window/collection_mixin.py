@@ -6,7 +6,6 @@ import uuid
 from PySide6.QtWidgets import QMessageBox, QInputDialog
 
 from app.models import Collection
-from app.storage import library_json_path, save_library_bundle
 from app.logging_utils import kv
 
 if TYPE_CHECKING:
@@ -203,7 +202,7 @@ class CollectionMixin:
         )
 
     def _save_bundle(self: "MainWindow") -> None:
-        save_library_bundle(library_json_path(), self._all_games, self._collections)
+        self._repo.save()
 
     def _refresh_ui_after_collections_change(self: "MainWindow", keep_kind: str = "all", keep_id: Optional[str] = None) -> None:
         """Rebuild sidebar without forcibly resetting to All Games."""
