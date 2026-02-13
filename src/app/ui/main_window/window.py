@@ -12,12 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from app.models import Game, Collection
+from app.config import AppConfig
 from app.events import EventBus, AppEvent
 from app.repositories import JsonGameRepository
-from app.storage import (
-    library_json_path, settings_json_path,
-    load_settings,
-)
+from app.storage import library_json_path, settings_json_path
 from app.logging_utils import connect_safe, get_logger, kv, RateLimiter, wrap_slot
 from app.ui.widgets import (
     GameGrid, DetailsPanel, FilterChipsBar, BatchToolbar,
@@ -74,35 +72,37 @@ class MainWindow(
         self._startup_status = None
         self._first_render_done = False
 
-        # Load settings
+        # Load settings via typed AppConfig
         settings_start = time.perf_counter()
-        self._settings = load_settings(settings_json_path())
+        self._config = AppConfig.load()
+        # Backward-compat dict interface for mixins that still use self._settings
+        self._settings = self._config
         self._log.info(
             "startup_settings_loaded %s",
             kv(duration_ms=round((time.perf_counter() - settings_start) * 1000, 1)),
         )
 
-        # Initialize state from settings
-        self._root_folder: str = self._settings.get("root_folder", "")
-        self._view_mode: str = self._settings.get("view_mode", "comfortable")
-        self._focus_mode: bool = self._settings.get("focus_mode", False)
-        self._quick_filter: str = self._settings.get("quick_filter", "all")
-        self._tag_filter: Optional[str] = self._settings.get("tag_filter")
-        self._status_filter: str = self._settings.get("status_filter", "all")
-        self._confidence_filter: str = self._settings.get("confidence_filter", "all")
-        self._type_filter: str = self._settings.get("type_filter", "all")
-        self._sort_by: str = self._settings.get("sort_by", "title")
-        self._updates_filter: str = self._settings.get("updates_filter", "all")
-        self._updates_density: str = self._settings.get("updates_density", "comfortable")
-        self._health_filter: str = self._settings.get("health_filter", "all")
-        self._health_density: str = self._settings.get("health_density", "comfortable")
-        self._details_visible: bool = self._settings.get("details_visible", False)
-        self._details_on_launch: bool = self._settings.get("details_on_launch", False)
-        self._details_on_selection: bool = self._settings.get("details_on_selection", True)
+        # Initialize state from config (direct attribute access)
+        self._root_folder: str = self._config.root_folder
+        self._view_mode: str = self._config.view_mode
+        self._focus_mode: bool = self._config.focus_mode
+        self._quick_filter: str = self._config.quick_filter
+        self._tag_filter: Optional[str] = self._config.tag_filter
+        self._status_filter: str = self._config.status_filter
+        self._confidence_filter: str = self._config.confidence_filter
+        self._type_filter: str = self._config.type_filter
+        self._sort_by: str = self._config.sort_by
+        self._updates_filter: str = self._config.updates_filter
+        self._updates_density: str = self._config.updates_density
+        self._health_filter: str = self._config.health_filter
+        self._health_density: str = self._config.health_density
+        self._details_visible: bool = self._config.details_visible
+        self._details_on_launch: bool = self._config.details_on_launch
+        self._details_on_selection: bool = self._config.details_on_selection
         self._user_hid_details: bool = False
-        self._theme: str = self._settings.get("theme", "dark")
-        self._font_family: str = self._settings.get("font_family", "Segoe UI")
-        self._font_scale: str = self._settings.get("font_scale", "default")
+        self._theme: str = self._config.theme
+        self._font_family: str = self._config.font_family
+        self._font_scale: str = self._config.font_scale
 
         # Load library via repository
         lib_start = time.perf_counter()
