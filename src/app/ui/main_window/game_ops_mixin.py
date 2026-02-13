@@ -24,18 +24,18 @@ class GameOpsMixin:
         return self._games_by_id.get(game_id)
 
     def _add_game(self: "MainWindow", game: Game) -> None:
-        """Add a game to both the list and the index."""
-        self._all_games.append(game)
-        self._games_by_id[game.game_id] = game
+        """Add a game to the repository."""
+        self._repo.add(game)
 
     def _remove_game_by_id(self: "MainWindow", game_id: str) -> None:
-        """Remove a game from both the list and the index."""
-        self._all_games = [g for g in self._all_games if g.game_id != game_id]
-        self._games_by_id.pop(game_id, None)
+        """Remove a game from the repository."""
+        self._repo.remove(game_id)
+        self._all_games = self._repo.get_all()
 
     def _rebuild_game_index(self: "MainWindow") -> None:
-        """Rebuild the game lookup index after bulk list mutations."""
-        self._games_by_id = {g.game_id: g for g in self._all_games}
+        """Sync _all_games list into the repository and rebuild index."""
+        self._repo.update_all(self._all_games)
+        self._games_by_id = self._repo.index
 
     def _fix_game(self: "MainWindow", game_id: str, issue_code: str) -> None:
         g = self._get_game(game_id)
