@@ -1,6 +1,6 @@
 """Core MainWindow class combining all mixins."""
 from __future__ import annotations
-from typing import List, Optional
+from typing import Dict, List, Optional
 import os
 import time
 
@@ -105,6 +105,7 @@ class MainWindow(
         # Load library
         lib_start = time.perf_counter()
         self._all_games, self._collections = load_library_bundle(library_json_path())
+        self._games_by_id: Dict[str, Game] = {g.game_id: g for g in self._all_games}
         self._active_collection_id: Optional[str] = None
         self._log.info(
             "startup_library_loaded %s",

@@ -20,10 +20,22 @@ class GameOpsMixin:
     """Mixin providing game operations for MainWindow."""
 
     def _get_game(self: "MainWindow", game_id: str) -> Optional[Game]:
-        for g in self._all_games:
-            if g.game_id == game_id:
-                return g
-        return None
+        """O(1) game lookup by ID using the indexed dict."""
+        return self._games_by_id.get(game_id)
+
+    def _add_game(self: "MainWindow", game: Game) -> None:
+        """Add a game to both the list and the index."""
+        self._all_games.append(game)
+        self._games_by_id[game.game_id] = game
+
+    def _remove_game_by_id(self: "MainWindow", game_id: str) -> None:
+        """Remove a game from both the list and the index."""
+        self._all_games = [g for g in self._all_games if g.game_id != game_id]
+        self._games_by_id.pop(game_id, None)
+
+    def _rebuild_game_index(self: "MainWindow") -> None:
+        """Rebuild the game lookup index after bulk list mutations."""
+        self._games_by_id = {g.game_id: g for g in self._all_games}
 
     def _fix_game(self: "MainWindow", game_id: str, issue_code: str) -> None:
         g = self._get_game(game_id)
@@ -202,7 +214,7 @@ class GameOpsMixin:
         if QMessageBox.question(self, "Remove", "Remove this entry from the library?") != QMessageBox.Yes:
             return
 
-        self._all_games = [g for g in self._all_games if g.game_id != game_id]
+        self._remove_game_by_id(game_id)
         self._rebuild_search_cache()
         self._apply_search()
         self._persist_library()

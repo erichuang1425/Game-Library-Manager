@@ -178,6 +178,7 @@ class ScanMixin:
         scanned_keys = {self._game_key(g) for g in games}
 
         self._all_games = merge_scanned_into_library(self._all_games, games)
+        self._rebuild_game_index()
         self._rebuild_search_cache()
         after = len(self._all_games)
         delta = after - before
