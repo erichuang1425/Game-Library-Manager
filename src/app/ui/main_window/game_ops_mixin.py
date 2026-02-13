@@ -9,7 +9,6 @@ import webbrowser
 from PySide6.QtWidgets import QMessageBox, QInputDialog, QFileDialog
 
 from app.models import Game
-from app.storage import library_json_path, save_library_bundle
 from app.services import launch_game
 from app.logging_utils import kv
 
@@ -173,7 +172,7 @@ class GameOpsMixin:
         if ok:
             g.launch_count += 1
             g.last_played = datetime.now()
-            save_library_bundle(library_json_path(), self._all_games, self._collections)
+            self._persist_library()
             self.details.show_game(g)
             self.statusBar().showMessage(f"{g.title}: {info}", 5000)
         else:
@@ -195,7 +194,7 @@ class GameOpsMixin:
             self._log.info("game_changed %s", kv(game_id=game_id, title=getattr(g, "title", "")))
 
         self.details.apply_edits_to_game()
-        save_library_bundle(library_json_path(), self._all_games, self._collections)
+        self._persist_library()
         self._apply_search()
         self._selected_game_id = game_id
 
@@ -206,7 +205,7 @@ class GameOpsMixin:
         self._all_games = [g for g in self._all_games if g.game_id != game_id]
         self._rebuild_search_cache()
         self._apply_search()
-        save_library_bundle(library_json_path(), self._all_games, self._collections)
+        self._persist_library()
 
         if self.health.isVisible():
             self.health.set_games(self._all_games)

@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog, QFileDialog
 
 from app.models import Game
-from app.storage import library_json_path, settings_json_path, save_library_bundle, save_settings
+from app.storage import settings_json_path, save_settings
 from app.services import find_duplicate_shortcuts_in_root, move_duplicates_to_quarantine, merge_scanned_into_library, pixmap_for_game
 from app.ui.dialogs import ScanWorker
 from app.ui.widgets import show_success, show_error
@@ -188,7 +188,8 @@ class ScanMixin:
         to_prime = [g for g in self._all_games if (self._game_key(g) in scanned_keys) and (not getattr(g, "icon_upscaled", False))]
         icons_refreshed = self._prime_icons(to_prime)
         self._apply_search()
-        save_library_bundle(library_json_path(), self._all_games, self._collections)
+        self._persist_library()
+        self._flush_save()  # immediate write after scan — don't defer bulk changes
         self._refresh_scan_views()
 
         msg_lines = [
