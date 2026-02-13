@@ -124,6 +124,13 @@ class MainWindow(
 
         apply_theme(QApplication.instance(), self._theme, self._font_family, self._font_scale)
 
+        # Debounced save: coalesce rapid _persist_library() calls into one write
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(500)
+        self._save_timer.timeout.connect(self._flush_save)
+        self._save_dirty = False
+
         # Worker handles
         self._scan_thread = None
         self._scan_worker = None
@@ -695,7 +702,21 @@ class MainWindow(
             self._log.debug("resize %s", kv(w=self.width(), h=self.height()))
 
     def _persist_library(self) -> None:
-        self._save_bundle()
+        """Schedule a debounced library save (500ms coalesce window)."""
+        self._save_dirty = True
+        self._save_timer.start()
+
+    def _flush_save(self) -> None:
+        """Immediately persist library if dirty. Called by timer and closeEvent."""
+        if self._save_dirty:
+            self._save_bundle()
+            self._save_dirty = False
+
+    def closeEvent(self, event) -> None:
+        """Ensure pending saves are flushed before exit."""
+        self._save_timer.stop()
+        self._flush_save()
+        super().closeEvent(event)
 
     def _refresh_list(self) -> None:
         self._apply_search()
