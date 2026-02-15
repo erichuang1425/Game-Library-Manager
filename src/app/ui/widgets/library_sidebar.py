@@ -43,7 +43,7 @@ class LibrarySidebar(QWidget):
         self._hover_expand = False
 
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.setMinimumWidth(self._collapsed_width)
+        self.setMinimumWidth(self._expanded_width)
         self.setMaximumWidth(theme.sidebar_width_max)
 
         layout = QVBoxLayout(self)
@@ -63,7 +63,7 @@ class LibrarySidebar(QWidget):
         header.addStretch(1)
 
         # Collapse toggle button
-        self._collapse_btn = QPushButton(AppIcons.UI_CHEVRON_RIGHT)
+        self._collapse_btn = QPushButton(AppIcons.UI_CHEVRON_LEFT)
         self._collapse_btn.setToolTip("Collapse sidebar")
         self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setStyleSheet(ghost_btn_style(theme))
@@ -146,7 +146,7 @@ class LibrarySidebar(QWidget):
         self.list.clear()
 
         fm = self.list.fontMetrics()
-        max_w = max(140, self.list.viewport().width() - 48)
+        max_w = max(160, self.list.viewport().width() - 24)
 
         if self._collapsed:
             self._add_icon_item(AppIcons.NAV_LIBRARY, "All Games", all_count, "all")
@@ -277,7 +277,7 @@ class LibrarySidebar(QWidget):
         self.new_btn.setVisible(show)
         self._ver_label.setVisible(show)
         self._collapse_btn.setText(
-            AppIcons.UI_CHEVRON_RIGHT if self._collapsed else AppIcons.UI_CHEVRON_DOWN
+            AppIcons.UI_CHEVRON_RIGHT if self._collapsed else AppIcons.UI_CHEVRON_LEFT
         )
         self._collapse_btn.setToolTip(
             "Expand sidebar" if self._collapsed else "Collapse sidebar"
@@ -412,7 +412,7 @@ class LibrarySidebar(QWidget):
         if not self._collapsed:
             # Update elision for current width
             fm = self.list.fontMetrics()
-            max_w = max(80, self.list.viewport().width() - 48)
+            max_w = max(120, self.list.viewport().width() - 24)
             for i in range(self.list.count()):
                 item = self.list.item(i)
                 if not item:
@@ -425,15 +425,5 @@ class LibrarySidebar(QWidget):
                 if elided != item.text():
                     item.setText(elided)
 
-    # ---- Hover expand for collapsed mode ----
-    def enterEvent(self, event) -> None:
-        if self._collapsed and not self._pinned_expanded:
-            self._hover_expand = True
-            self.set_collapsed(False, animate=True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event) -> None:
-        if self._hover_expand and not self._pinned_expanded:
-            self._hover_expand = False
-            self.set_collapsed(True, animate=True)
-        super().leaveEvent(event)
+    # Sidebar expand/collapse is controlled only by the toggle button,
+    # not by hover, to prevent accidental distracting layout shifts.

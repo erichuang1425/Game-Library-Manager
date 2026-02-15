@@ -182,10 +182,10 @@ class UIMixin:
         sidebar_w = self._splitter.sizes()[0] if len(self._splitter.sizes()) == 3 else 220
         if self._details_visible and not self._focus_mode:
             self._details_widget.show()
-            # Priority-based: allocate sidebar first, details second, grid gets rest
-            # Grid must have at least 480px; details target 340px but shrinks if needed
+            # Priority-based: allocate sidebar first, then grid gets majority, details gets remainder
+            # Grid must have at least 480px; details target 300px but shrinks if needed
             remaining = self.width() - sidebar_w
-            details_w = min(340, max(260, remaining - 480))
+            details_w = min(300, max(260, remaining - 540))
             grid_w = max(480, remaining - details_w)
             target = [sidebar_w, grid_w, details_w]
         else:
@@ -227,7 +227,7 @@ class UIMixin:
         step_fn()
 
     def _reset_layout(self: "MainWindow") -> None:
-        self._splitter.setSizes([200, 900, 320 if self._details_visible else 0])
+        self._splitter.setSizes([220, self.width() - 520, 300 if self._details_visible else 0])
         self._settings["splitter_sizes"] = self._splitter.sizes()
         self._persist_settings()
         self.grid.refresh()

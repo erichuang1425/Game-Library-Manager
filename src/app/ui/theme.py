@@ -75,8 +75,8 @@ class ThemeSpec:
     details_width_min: int = 340
     details_width_max: int = 520
     toolbar_height: int = 48
-    grid_gap: int = 14
-    grid_padding: int = 16
+    grid_gap: int = 16
+    grid_padding: int = 20
     card_min_width: int = 200
     card_max_width: int = 320
     # Section spacing

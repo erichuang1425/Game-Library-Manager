@@ -112,7 +112,7 @@ class GameCard(QFrame):
         self.icon_frame = QFrame()
         self.icon_frame.setStyleSheet(
             f"QFrame {{ background:{theme.surface_alt.name(QColor.HexArgb)}; "
-            f"border-radius:{theme.radius_md}px; border: none; overflow: hidden; }}"
+            f"border-radius:{theme.radius_md}px; border: none; }}"
         )
         icon_ratio = 0.65 if view_mode == "comfortable" else 0.55
         icon_height = int(self.minimumHeight() * icon_ratio)
@@ -199,7 +199,7 @@ class GameCard(QFrame):
         title_size = int((15 if view_mode == "comfortable" else 13) * scale)
         fm = title.fontMetrics()
         title.setWordWrap(True)
-        title.setMaximumHeight(fm.lineSpacing() * 2 + 4)
+        title.setMaximumHeight(fm.lineSpacing() * 3 + 4)
         title.setText(game.title)
         title.setToolTip(game.title)
         title.setStyleSheet(
@@ -267,7 +267,7 @@ class GameCard(QFrame):
                         f"border-radius: {theme.radius_sm - 2}px; "
                         f"padding: 2px 8px; border: none;"
                     )
-                    tag_lbl.setMaximumWidth(90)
+                    tag_lbl.setMaximumWidth(120)
                     tag_row.addWidget(tag_lbl)
                 if len(tags) > max_tags:
                     more = QLabel(f"+{len(tags) - max_tags}")
@@ -557,19 +557,14 @@ class GameCard(QFrame):
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
         self.overlay_anim.start()
         theme = self._theme
-        # Elevate shadow for "lift" effect
+        # Elevate shadow for subtle depth feedback (no margin changes)
         if hasattr(self, '_shadow_effect') and self._shadow_effect:
-            self._shadow_effect.setBlurRadius(28)
-            self._shadow_effect.setOffset(0, 8)
+            self._shadow_effect.setBlurRadius(24)
+            self._shadow_effect.setOffset(0, 6)
             self._shadow_effect.setColor(QColor(
                 theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
                 theme.elevation_mid,
             ))
-        # Subtle upward lift via margin animation
-        if not is_reduced_motion():
-            self._hover_margin_anim = QPropertyAnimation(self, b"contentsMargins_top", self)
-            curr = self.contentsMargins()
-            self.setContentsMargins(curr.left(), max(0, curr.top() - 2), curr.right(), curr.bottom() + 2)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
@@ -586,10 +581,6 @@ class GameCard(QFrame):
                 theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
                 theme.elevation_low,
             ))
-        # Reset lift
-        if not is_reduced_motion():
-            pad = theme.spacing_md if self.view_mode == "comfortable" else theme.spacing_sm
-            self.setContentsMargins(pad, pad, pad, pad)
         super().leaveEvent(event)
 
     def resizeEvent(self, event) -> None:
