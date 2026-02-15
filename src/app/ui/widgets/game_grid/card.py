@@ -172,15 +172,19 @@ class GameCard(QFrame):
         icon_layout.addWidget(base)
         icon_container.addWidget(self.icon_frame)
 
-        # Status bar — colored strip at bottom of icon area
+        # Status bar — colored strip at bottom of icon area (clickable to cycle status)
         sc = status_color(theme, game.status)
-        self._status_bar = QFrame()
-        self._status_bar.setFixedHeight(3)
+        self._status_bar = QPushButton()
+        self._status_bar.setFlat(True)
+        self._status_bar.setCursor(Qt.PointingHandCursor)
+        self._status_bar.setFixedHeight(6)  # Slightly taller for better clickability
         self._status_bar.setStyleSheet(
-            f"background: {sc.name()}; border: none; "
-            f"border-radius: 0px;"
+            f"QPushButton {{ background: {sc.name()}; border: none; "
+            f"border-radius: 0px; }}"
+            f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
         )
-        self._status_bar.setToolTip(status_label(game.status))
+        self._status_bar.setToolTip(f"{status_label(game.status)} (click to cycle status)")
+        self._status_bar.clicked.connect(self._on_status_clicked)
         icon_container.addWidget(self._status_bar)
 
         layout.addLayout(icon_container)
@@ -203,26 +207,47 @@ class GameCard(QFrame):
         )
         layout.addWidget(title)
 
-        # Rating + last played (always visible, muted)
+        # Rating (clickable stars) + last played (always visible, muted)
         meta_size = int(11 * scale)
-        rating_text = stars(game.rating)
         time_text = relative_time(game.last_played)
 
-        meta_parts = [rating_text]
-        if time_text and view_mode == "comfortable":
-            meta_parts.append(time_text)
-        meta_line = "  \u00B7  ".join(meta_parts)
+        # Create clickable rating widget
+        rating_row = QHBoxLayout()
+        rating_row.setContentsMargins(0, 0, 0, 0)
+        rating_row.setSpacing(2)
 
-        meta_label = QLabel(meta_line)
-        meta_label.setStyleSheet(
-            f"font-size: {meta_size}px; color: {theme.text_muted.name()}; "
-            f"background: transparent; border: none;"
-        )
-        meta_label.setToolTip(
-            f"Rating: {game.rating or 'unrated'}"
-            + (f"\nLast played: {time_text}" if time_text else "")
-        )
-        layout.addWidget(meta_label)
+        self._star_buttons = []
+        current_rating = game.rating or 0
+        stars_filled = max(0, min(5, round(current_rating / 2)))
+
+        for i in range(5):
+            star_btn = QPushButton("★" if i < stars_filled else "☆")
+            star_btn.setFlat(True)
+            star_btn.setCursor(Qt.PointingHandCursor)
+            star_btn.setFixedSize(16, 16)
+            star_btn.setStyleSheet(
+                f"QPushButton {{ font-size: {meta_size}px; color: {theme.text_muted.name()}; "
+                f"background: transparent; border: none; padding: 0; }}"
+                f"QPushButton:hover {{ color: {theme.accent.name()}; }}"
+            )
+            # Set rating to (i+1)*2 when clicked (1-10 scale)
+            star_value = (i + 1) * 2
+            star_btn.clicked.connect(lambda checked, val=star_value: self._on_rating_clicked(val))
+            star_btn.setToolTip(f"Rate {star_value}/10")
+            self._star_buttons.append(star_btn)
+            rating_row.addWidget(star_btn)
+
+        if time_text and view_mode == "comfortable":
+            time_sep = QLabel(f"  \u00B7  {time_text}")
+            time_sep.setStyleSheet(
+                f"font-size: {meta_size}px; color: {theme.text_muted.name()}; "
+                f"background: transparent; border: none;"
+            )
+            time_sep.setToolTip(f"Last played: {time_text}" if time_text else "Never played")
+            rating_row.addWidget(time_sep)
+
+        rating_row.addStretch(1)
+        layout.addLayout(rating_row)
 
         # Tag chips (max 2-3, always visible in comfortable mode)
         if view_mode == "comfortable":
@@ -332,6 +357,46 @@ class GameCard(QFrame):
         menu.exec(QCursor.pos())
 
     # ---- Event handlers ----
+    def _on_rating_clicked(self, rating: int) -> None:
+        """Handle rating star click."""
+        # Allow clicking the same rating to unset (set to None)
+        if self.game.rating == rating:
+            self.rating_changed.emit(self.game.game_id, None)
+            self.game.rating = None
+        else:
+            self.rating_changed.emit(self.game.game_id, rating)
+            self.game.rating = rating
+        # Update star display
+        self._update_star_display()
+
+    def _update_star_display(self) -> None:
+        """Update the visual display of rating stars."""
+        current_rating = self.game.rating or 0
+        stars_filled = max(0, min(5, round(current_rating / 2)))
+        for i, btn in enumerate(self._star_buttons):
+            btn.setText("★" if i < stars_filled else "☆")
+
+    def _on_status_clicked(self) -> None:
+        """Handle status bar click to cycle through statuses."""
+        # Cycle: backlog → playing → finished → dropped → backlog
+        status_cycle = ["backlog", "playing", "finished", "dropped"]
+        current_idx = status_cycle.index(self.game.status) if self.game.status in status_cycle else 0
+        next_status = status_cycle[(current_idx + 1) % len(status_cycle)]
+
+        # Emit signal for parent to handle
+        self.context_action.emit(self.game.game_id, f"set_status_{next_status}")
+
+        # Update local display
+        self.game.status = next_status
+        theme = self._theme
+        sc = status_color(theme, next_status)
+        self._status_bar.setStyleSheet(
+            f"QPushButton {{ background: {sc.name()}; border: none; "
+            f"border-radius: 0px; }}"
+            f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
+        )
+        self._status_bar.setToolTip(f"{status_label(next_status)} (click to cycle status)")
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             # In multi-select mode or with Ctrl held, toggle selection
@@ -344,14 +409,49 @@ class GameCard(QFrame):
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
 
-        a_play = menu.addAction("Play")
-        a_add = menu.addAction("Add to collection…")
+        a_play = menu.addAction(f"{AppIcons.ACT_PLAY} Play")
+        a_edit = menu.addAction("Edit Details")
         menu.addSeparator()
-        a_open_folder = menu.addAction("Open shortcut folder")
-        a_open_file = menu.addAction("Open shortcut file")
+
+        # Set Status submenu
+        status_menu = menu.addMenu("Set Status")
+        a_status_backlog = status_menu.addAction("Backlog")
+        a_status_playing = status_menu.addAction("Playing")
+        a_status_finished = status_menu.addAction("Finished")
+        a_status_dropped = status_menu.addAction("Dropped")
+
+        # Mark current status
+        status_actions = {
+            "backlog": a_status_backlog,
+            "playing": a_status_playing,
+            "finished": a_status_finished,
+            "dropped": a_status_dropped,
+        }
+        if self.game.status in status_actions:
+            status_actions[self.game.status].setText(f"✓ {status_actions[self.game.status].text()}")
+
+        # Rate submenu
+        rate_menu = menu.addMenu("Rate")
+        rating_actions = {}
+        for i in range(1, 11):
+            stars_text = "★" * (i // 2 + i % 2) + "☆" * (5 - (i // 2 + i % 2))
+            action = rate_menu.addAction(f"{stars_text} {i}/10")
+            rating_actions[i] = action
+        rate_menu.addSeparator()
+        a_rate_clear = rate_menu.addAction("Clear rating")
+
+        # Mark current rating
+        if self.game.rating and self.game.rating in rating_actions:
+            rating_actions[self.game.rating].setText(f"✓ {rating_actions[self.game.rating].text()}")
+
         menu.addSeparator()
-        a_rename = menu.addAction("Rename display name…")
-        a_remove = menu.addAction("Remove from library…")
+        a_add = menu.addAction("Add to Collection…")
+        menu.addSeparator()
+        a_open_folder = menu.addAction("Open Shortcut Folder")
+        a_open_file = menu.addAction("Open Shortcut File")
+        menu.addSeparator()
+        a_rename = menu.addAction("Rename…")
+        a_remove = menu.addAction("Remove from Library…")
 
         chosen = menu.exec(event.globalPos())
         if not chosen:
@@ -359,6 +459,8 @@ class GameCard(QFrame):
 
         if chosen == a_play:
             self.play_clicked.emit(self.game.game_id)
+        elif chosen == a_edit:
+            self.clicked.emit(self.game.game_id)  # Triggers details panel
         elif chosen == a_add:
             self.context_action.emit(self.game.game_id, "add_to_collection")
         elif chosen == a_open_folder:
@@ -369,6 +471,38 @@ class GameCard(QFrame):
             self.context_action.emit(self.game.game_id, "rename")
         elif chosen == a_remove:
             self.context_action.emit(self.game.game_id, "remove")
+        elif chosen in [a_status_backlog, a_status_playing, a_status_finished, a_status_dropped]:
+            # Set status
+            status_map = {
+                a_status_backlog: "backlog",
+                a_status_playing: "playing",
+                a_status_finished: "finished",
+                a_status_dropped: "dropped",
+            }
+            new_status = status_map[chosen]
+            self.context_action.emit(self.game.game_id, f"set_status_{new_status}")
+            self.game.status = new_status
+            # Update status bar
+            theme = self._theme
+            sc = status_color(theme, new_status)
+            self._status_bar.setStyleSheet(
+                f"QPushButton {{ background: {sc.name()}; border: none; "
+                f"border-radius: 0px; }}"
+                f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
+            )
+            self._status_bar.setToolTip(f"{status_label(new_status)} (click to cycle status)")
+        elif chosen == a_rate_clear:
+            self.rating_changed.emit(self.game.game_id, None)
+            self.game.rating = None
+            self._update_star_display()
+        elif chosen in rating_actions.values():
+            # Find which rating was chosen
+            for rating, action in rating_actions.items():
+                if action == chosen:
+                    self.rating_changed.emit(self.game.game_id, rating)
+                    self.game.rating = rating
+                    self._update_star_display()
+                    break
 
     def _ensure_overlay(self) -> None:
         """Build the overlay sheet on first hover (lazy construction)."""
