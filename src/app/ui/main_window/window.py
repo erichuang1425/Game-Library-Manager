@@ -422,6 +422,25 @@ class MainWindow(
         toolbar.addWidget(self.view_comfort)
         toolbar.addWidget(self.view_compact)
 
+        # Browse mode toggle (Scroll vs Pages)
+        sep_browse = QFrame()
+        sep_browse.setFrameShape(QFrame.VLine)
+        sep_browse.setStyleSheet(f"color: {theme.outline.name(QColor.HexArgb)};")
+        sep_browse.setFixedWidth(1)
+        toolbar.addWidget(sep_browse)
+
+        self.browse_scroll_btn = QPushButton(f"{AppIcons.UI_SCROLL} Scroll")
+        self.browse_scroll_btn.setToolTip("Continuous scrolling mode (virtual scroll)")
+        self.browse_pages_btn = QPushButton(f"{AppIcons.UI_PAGES} Pages")
+        self.browse_pages_btn.setToolTip("Paginated browsing mode")
+        for btn in (self.browse_scroll_btn, self.browse_pages_btn):
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(self._on_browse_mode_changed)
+            btn.setMaximumWidth(80)
+        toolbar.addWidget(self.browse_scroll_btn)
+        toolbar.addWidget(self.browse_pages_btn)
+
         content_layout.addLayout(toolbar)
 
         # -- Secondary controls (hidden filters) --
@@ -691,6 +710,12 @@ class MainWindow(
                width=self.width(), height=self.height()),
         )
         self.grid.set_view_mode(self._view_mode)
+        # Apply saved browse mode (scroll vs pages)
+        browse_mode = self._config.browse_mode
+        page_size = self._config.page_size
+        self.grid.set_page_size(page_size)
+        self.grid.set_browse_mode(browse_mode)
+        self._update_browse_mode_buttons()
         self._update_view_mode_buttons()
         self._apply_quick_filter_buttons()
         self._apply_filter_combo_defaults()

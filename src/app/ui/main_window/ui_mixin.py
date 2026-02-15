@@ -38,6 +38,7 @@ class UIMixin:
             self._ensure_details_visible()
         self._apply_quick_filter_buttons()
         self._update_view_mode_buttons()
+        self._update_browse_mode_buttons()
         if hasattr(self, 'update_footer'):
             self.update_footer()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
@@ -84,6 +85,21 @@ class UIMixin:
         self._settings["view_mode"] = self._view_mode
         self._persist_settings()
         self._update_view_mode_buttons()
+
+    def _on_browse_mode_changed(self: "MainWindow") -> None:
+        """Handle browse mode toggle between scroll and pages."""
+        mode = "pages" if self.sender() == self.browse_pages_btn else "scroll"
+        self._pulse_widget(self.sender())
+        self.grid.set_browse_mode(mode)
+        self._settings["browse_mode"] = mode
+        self._persist_settings()
+        self._update_browse_mode_buttons()
+
+    def _update_browse_mode_buttons(self: "MainWindow") -> None:
+        """Update browse mode button checked states."""
+        mode = self.grid.get_browse_mode()
+        self.browse_scroll_btn.setChecked(mode == "scroll")
+        self.browse_pages_btn.setChecked(mode == "pages")
 
     def _toggle_focus_mode(self: "MainWindow") -> None:
         self._focus_mode = self.focus_btn.isChecked()
@@ -296,9 +312,13 @@ class UIMixin:
         if compact:
             self.scan_btn.setText(AppIcons.ACT_SCAN)
             self.check_updates_btn.setText(AppIcons.NAV_UPDATES)
+            self.browse_scroll_btn.setText(AppIcons.UI_SCROLL)
+            self.browse_pages_btn.setText(AppIcons.UI_PAGES)
         else:
             self.scan_btn.setText(f"{AppIcons.ACT_SCAN}  Scan")
             self.check_updates_btn.setText(f"{AppIcons.NAV_UPDATES}  Updates")
+            self.browse_scroll_btn.setText(f"{AppIcons.UI_SCROLL} Scroll")
+            self.browse_pages_btn.setText(f"{AppIcons.UI_PAGES} Pages")
         # Hide less-essential filters in compact mode
         for widget in (self.conf_filter, self.type_filter):
             widget.setVisible(not compact)

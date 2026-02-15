@@ -1,7 +1,7 @@
 """Tests for Game model — defaults, equality, and enum integration."""
 import pytest
 from app.models import Game
-from app.models.enums import GameStatus, Confidence
+from app.models.enums import GameStatus, Confidence, BrowseMode, ViewMode
 
 
 class TestGameDefaults:
@@ -70,3 +70,11 @@ class TestEnumBackwardCompat:
         g = Game(game_id="1", title="Test", status=GameStatus.PLAYING)
         assert g.status == "playing"
         assert g.status == GameStatus.PLAYING
+
+    def test_browse_mode_enum_equals_string(self):
+        assert BrowseMode.SCROLL == "scroll"
+        assert BrowseMode.PAGES == "pages"
+
+    def test_view_mode_enum_equals_string(self):
+        assert ViewMode.COMFORTABLE == "comfortable"
+        assert ViewMode.COMPACT == "compact"
