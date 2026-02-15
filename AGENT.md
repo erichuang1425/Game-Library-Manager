@@ -98,14 +98,14 @@ src/app/
 | Task 6: Event Bus (ARCH-002) | ✅ Done | `EventBus` + `AppEvent` enum; scan_mixin emits GAMES_CHANGED |
 | Task 7: Configuration Mgmt (ARCH-003) | ✅ Done | `AppConfig` dataclass; dict-compat interface for mixins |
 | Task 8: pytest Migration + Tests | ✅ Done | 225 tests passing; 7 new test files + pyproject.toml |
-| Task 9: Keyboard Navigation | ⬜ Pending | |
-| Task 10: Virtual Scrolling | ⬜ Pending | |
-| Task 11: Inline Grid Interactions | ⬜ Pending | |
-| Task 12: Drag-and-Drop to Collections | ⬜ Pending | |
-| Task 13: Named Views | ⬜ Pending | |
-| Task 14: Custom Exception Hierarchy | ⬜ Pending | |
-| Task 15: Split Oversized Files | ⬜ Pending | |
-| Task 16: CI Pipeline | ⬜ Pending | |
+| Task 9: Keyboard Navigation | ✅ Done | All shortcuts implemented in actions_mixin.py; Ctrl+F, Escape, Return, Delete, etc. |
+| Task 10: Virtual Scrolling | ⬜ Pending | Major refactoring - requires QListView or manual virtual scroll |
+| Task 11: Inline Grid Interactions | ✅ Done | Rating stars always visible & clickable; status bar click-to-cycle; context menu |
+| Task 12: Drag-and-Drop to Collections | ✅ Done | Card drag + sidebar drop implemented; game_dropped_on_collection signal |
+| Task 13: Named Views | ⬜ Pending | Save filter/search combos as reusable views |
+| Task 14: Custom Exception Hierarchy | ✅ Done | `exceptions.py` with AppError, StorageError, NetworkError, ParseError, LaunchError, AuthError |
+| Task 15: Split Oversized Files | ⬜ Pending | 6 files exceed 500 lines; requires module extraction |
+| Task 16: CI Pipeline | ✅ Done | `.github/workflows/ci.yml` with pytest, coverage, ruff lint, Python 3.11/3.12 matrix |
 
 ### New Architecture (Sprint 6)
 
@@ -212,6 +212,7 @@ PYTHONPATH=src python -m pytest src/tests/ --cov=src/app --cov-report=term-missi
 
 ## Recent Changes (This Session — Sprint 6)
 
+### Previous Session (Tasks 1-8)
 1. **Task 1: Debounced saves** — 500ms QTimer coalesces _persist_library() calls (window.py, game_ops_mixin.py, scan_mixin.py)
 2. **Task 2: Persist dominant colors** — `dominant_color_hex` field on Game; card.py checks persisted hex before pixel extraction
 3. **Task 3: Game lookup index** — `_games_by_id` Dict[str, Game] for O(1) lookups; replaces linear scans in all mixins
@@ -220,6 +221,13 @@ PYTHONPATH=src python -m pytest src/tests/ --cov=src/app --cov-report=term-missi
 6. **Task 6: Event bus** — `EventBus` + `AppEvent` enum; scan_mixin emits events instead of cross-mixin calls
 7. **Task 7: AppConfig** — Type-safe dataclass replacing 25+ .get() calls; dict-compat interface for gradual migration
 8. **Task 8: pytest suite** — 225 tests (98 new): filter_utils, game_model, version_parser, title_matcher, events, config, repository
+
+### Current Session (Tasks 9-16 Review)
+9. **Task 9: Keyboard shortcuts** — Already complete; actions_mixin.py has all shortcuts (Ctrl+F, Escape, Return, Delete, E, Ctrl+N, Ctrl+S, F5, Ctrl+U, Ctrl+Shift+/)
+10. **Task 11: Inline interactions** — Already complete; rating stars always visible & clickable (card.py:211-251), status bar click-to-cycle (card.py:176-189), context menu
+11. **Task 12: Drag-and-drop** — Already complete; card.py mouseMoveEvent + library_sidebar.py drop events + collection_mixin.py handler
+12. **Task 14: Exception hierarchy** — Created exceptions.py with AppError, StorageError, NetworkError, ParseError, LaunchError, AuthError; updated json_store.py, launch_service.py, f95_parser.py, paths.py
+13. **Task 16: CI Pipeline** — Already complete; .github/workflows/ci.yml with pytest, coverage, ruff lint, Python 3.11/3.12 matrix, Codecov integration
 
 ---
 
