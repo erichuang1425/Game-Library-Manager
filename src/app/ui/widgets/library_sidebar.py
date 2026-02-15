@@ -30,6 +30,7 @@ class LibrarySidebar(QWidget):
     rename_collection_requested = Signal(str)
     delete_collection_requested = Signal(str)
     collapse_toggled = Signal(bool)  # True = collapsed
+    game_dropped_on_collection = Signal(str, str)  # (game_id, collection_id)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -79,6 +80,15 @@ class LibrarySidebar(QWidget):
         self.list.currentRowChanged.connect(self._on_row_changed)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._on_context_menu)
+
+        # Enable drag-and-drop
+        self.list.setAcceptDrops(True)
+        self.list.setDragEnabled(False)  # We only accept drops, not initiate drags
+        self.list.viewport().setAcceptDrops(True)
+        self.list.dragEnterEvent = self._drag_enter_event
+        self.list.dragMoveEvent = self._drag_move_event
+        self.list.dropEvent = self._drop_event
+
         layout.addWidget(self.list, 1)
 
         # New collection button at bottom
@@ -348,6 +358,53 @@ class LibrarySidebar(QWidget):
             self.rename_collection_requested.emit(coll_id)
         elif chosen == delete_act:
             self.delete_collection_requested.emit(coll_id)
+
+    # ---- Drag-and-drop handlers ----
+    def _drag_enter_event(self, event) -> None:
+        """Handle drag enter event."""
+        if event.mimeData().hasText() or event.mimeData().hasFormat("application/x-game-id"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _drag_move_event(self, event) -> None:
+        """Handle drag move event."""
+        if event.mimeData().hasText() or event.mimeData().hasFormat("application/x-game-id"):
+            # Check if we're over a collection item
+            item = self.list.itemAt(event.position().toPoint())
+            if item:
+                key = item.data(Qt.UserRole)
+                if key and key.startswith("collection:"):
+                    event.acceptProposedAction()
+                    # Highlight the item being hovered over
+                    self.list.setCurrentItem(item)
+                    return
+        event.ignore()
+
+    def _drop_event(self, event) -> None:
+        """Handle drop event."""
+        if not (event.mimeData().hasText() or event.mimeData().hasFormat("application/x-game-id")):
+            event.ignore()
+            return
+
+        # Get the item we dropped on
+        item = self.list.itemAt(event.position().toPoint())
+        if not item:
+            event.ignore()
+            return
+
+        key = item.data(Qt.UserRole)
+        if not key or not key.startswith("collection:"):
+            event.ignore()
+            return
+
+        # Extract game ID and collection ID
+        game_id = event.mimeData().text()
+        collection_id = key.replace("collection:", "")
+
+        # Emit signal for parent to handle
+        self.game_dropped_on_collection.emit(game_id, collection_id)
+        event.acceptProposedAction()
 
     def resizeEvent(self, event) -> None:
         """Refresh item labels on resize to re-elide text for current width."""

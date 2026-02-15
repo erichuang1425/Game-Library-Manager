@@ -198,6 +198,7 @@ class MainWindow(
         self.sidebar.new_collection_requested.connect(self._new_collection)
         self.sidebar.rename_collection_requested.connect(self._rename_collection_by_id)
         self.sidebar.delete_collection_requested.connect(self._delete_collection_by_id)
+        self.sidebar.game_dropped_on_collection.connect(self._on_game_dropped_on_collection)
         self.sidebar.set_games(self._all_games)
 
         content = self._build_content_area(theme)
