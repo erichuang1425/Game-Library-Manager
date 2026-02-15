@@ -34,6 +34,8 @@ class AppConfig:
     font_family: str = "Segoe UI"
     font_scale: str = "default"
     splitter_sizes: Optional[List[int]] = None
+    browse_mode: str = "scroll"
+    page_size: int = 24
 
     # Extra settings not managed as typed fields are preserved here
     _extra: Dict[str, Any] = None  # type: ignore[assignment]

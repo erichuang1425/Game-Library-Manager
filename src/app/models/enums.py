@@ -43,3 +43,8 @@ class ShortcutType(str, Enum):
 class ViewMode(str, Enum):
     COMFORTABLE = "comfortable"
     COMPACT = "compact"
+
+
+class BrowseMode(str, Enum):
+    SCROLL = "scroll"
+    PAGES = "pages"

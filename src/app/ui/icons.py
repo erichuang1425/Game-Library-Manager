@@ -62,6 +62,10 @@ class AppIcons:
     UI_DRAG = "\u2630"            # Trigram / drag handle
     UI_EXPAND = "\u25B8"          # Right-pointing triangle (collapsed)
     UI_COLLAPSE = "\u25BE"        # Down-pointing triangle (expanded)
+    UI_ARROW_LEFT = "\u2190"      # Left arrow
+    UI_ARROW_RIGHT = "\u2192"     # Right arrow
+    UI_PAGES = "\u2630"           # Trigram / Pages mode
+    UI_SCROLL = "\u2195"          # Up-down arrow / Scroll mode
 
     @staticmethod
     def status_icon(status: str) -> str:

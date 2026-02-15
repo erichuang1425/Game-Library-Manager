@@ -20,6 +20,8 @@ class TestAppConfigDefaults:
         assert cfg.font_family == "Segoe UI"
         assert cfg.details_on_selection is True
         assert cfg.splitter_sizes is None
+        assert cfg.browse_mode == "scroll"
+        assert cfg.page_size == 24
 
 
 class TestAppConfigUpdate:

@@ -12,7 +12,7 @@
 |--------|-------|
 | Lines of Code | ~24,500 |
 | Files | 108 Python files |
-| Tests | 225 (pytest) |
+| Tests | 227 (pytest) |
 | Framework | PySide6 (Qt) |
 | Platform | Windows |
 | Entry Point | `src/main.py` |
@@ -99,7 +99,7 @@ src/app/
 | Task 7: Configuration Mgmt (ARCH-003) | ✅ Done | `AppConfig` dataclass; dict-compat interface for mixins |
 | Task 8: pytest Migration + Tests | ✅ Done | 225 tests passing; 7 new test files + pyproject.toml |
 | Task 9: Keyboard Navigation | ✅ Done | All shortcuts implemented in actions_mixin.py; Ctrl+F, Escape, Return, Delete, etc. |
-| Task 10: Virtual Scrolling | ⬜ Pending | Major refactoring - requires QListView or manual virtual scroll |
+| Task 10: Virtual Scrolling | ✅ Done | Two browse modes (scroll/pages); virtual scroll renders only visible cards + buffer; paginated mode with prev/next/page buttons; `BrowseMode` enum; settings persistence |
 | Task 11: Inline Grid Interactions | ✅ Done | Rating stars always visible & clickable; status bar click-to-cycle; context menu |
 | Task 12: Drag-and-Drop to Collections | ✅ Done | Card drag + sidebar drop implemented; game_dropped_on_collection signal |
 | Task 13: Named Views | ⬜ Pending | Save filter/search combos as reusable views |
@@ -229,6 +229,19 @@ PYTHONPATH=src python -m pytest src/tests/ --cov=src/app --cov-report=term-missi
 12. **Task 14: Exception hierarchy** — Created exceptions.py with AppError, StorageError, NetworkError, ParseError, LaunchError, AuthError; updated json_store.py, launch_service.py, f95_parser.py, paths.py
 13. **Task 16: CI Pipeline** — Already complete; .github/workflows/ci.yml with pytest, coverage, ruff lint, Python 3.11/3.12 matrix, Codecov integration
 
+### Virtual Scrolling Session (Task 10)
+14. **Task 10: Virtual Scrolling** — Complete rewrite of `game_grid/grid.py`:
+    - **Two browse modes:** Scroll (continuous virtual scrolling) and Pages (paginated browsing)
+    - **Scroll mode:** Only renders cards visible in viewport + 2 buffer rows above/below; incremental updates on scroll; O(viewport) memory instead of O(n)
+    - **Pages mode:** Fixed page of cards (default 24) with full pagination bar (prev/next, page number buttons with ellipsis, page info label)
+    - **New enum:** `BrowseMode` in `enums.py` (SCROLL, PAGES)
+    - **Config persistence:** `browse_mode` and `page_size` fields in `AppConfig`
+    - **UI toggle:** Scroll/Pages buttons in toolbar next to Grid/List view toggle
+    - **Keyboard support:** PageUp/PageDown navigate pages in pages mode
+    - **New icons:** `UI_ARROW_LEFT`, `UI_ARROW_RIGHT`, `UI_PAGES`, `UI_SCROLL` in `AppIcons`
+    - **Files modified:** `grid.py`, `enums.py`, `config.py`, `icons.py`, `window.py`, `ui_mixin.py`
+    - **Tests:** 227 passing (2 new for BrowseMode/ViewMode enums + config defaults)
+
 ---
 
 ## Data Locations
@@ -251,7 +264,7 @@ PYTHONPATH=src python -m pytest src/tests/ --cov=src/app --cov-report=term-missi
 from app.config import AppConfig
 from app.events import EventBus, AppEvent
 from app.repositories import JsonGameRepository, GameRepository
-from app.models.enums import GameStatus, SortMode, QuickFilter, Confidence
+from app.models.enums import GameStatus, SortMode, QuickFilter, Confidence, BrowseMode, ViewMode
 
 # Existing public API via services/__init__.py
 from app.services import (
