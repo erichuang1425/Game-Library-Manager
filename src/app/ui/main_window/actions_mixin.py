@@ -74,6 +74,30 @@ class ActionsMixin:
         # Reset layout: Ctrl+Shift+R
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._reset_layout)
 
+        # Launch selected game: Return/Enter
+        QShortcut(QKeySequence("Return"), self, self._launch_selected_game)
+
+        # Delete selected game: Delete
+        QShortcut(QKeySequence("Delete"), self, self._delete_selected_game)
+
+        # Edit selected game (open details): E
+        QShortcut(QKeySequence("E"), self, self._edit_selected_game)
+
+        # New collection: Ctrl+N
+        QShortcut(QKeySequence("Ctrl+N"), self, self._new_collection)
+
+        # Force save: Ctrl+S
+        QShortcut(QKeySequence("Ctrl+S"), self, self._flush_save)
+
+        # Scan: F5
+        QShortcut(QKeySequence("F5"), self, self._on_scan_clicked)
+
+        # Check updates: Ctrl+U
+        QShortcut(QKeySequence("Ctrl+U"), self, self._on_check_updates_fetch)
+
+        # Show shortcuts help: Ctrl+Shift+/
+        QShortcut(QKeySequence("Ctrl+Shift+/"), self, self._show_shortcuts_help)
+
     def _focus_search(self: "MainWindow") -> None:
         """Focus the search bar."""
         self.search.setFocus()
@@ -231,6 +255,52 @@ class ActionsMixin:
             os.startfile(str(path))
         except Exception:
             self._log.exception("open_data_folder_failed")
+
+    def _launch_selected_game(self: "MainWindow") -> None:
+        """Launch the currently selected game."""
+        if self._selected_game_id:
+            self._on_game_play(self._selected_game_id)
+        else:
+            self.statusBar().showMessage("No game selected", 2000)
+
+    def _delete_selected_game(self: "MainWindow") -> None:
+        """Delete the currently selected game with confirmation."""
+        if not self._selected_game_id:
+            self.statusBar().showMessage("No game selected", 2000)
+            return
+
+        game = self._get_game(self._selected_game_id)
+        if not game:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Game",
+            f"Are you sure you want to delete '{game.title}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self._remove_game(self._selected_game_id)
+
+    def _edit_selected_game(self: "MainWindow") -> None:
+        """Open details panel for the currently selected game."""
+        if self._selected_game_id:
+            if not self._details_visible:
+                self.details_toggle.setChecked(True)
+                self._toggle_details_panel()
+            # Focus the details panel
+            if hasattr(self, 'details'):
+                self.details.setFocus()
+        else:
+            self.statusBar().showMessage("No game selected", 2000)
+
+    def _show_shortcuts_help(self: "MainWindow") -> None:
+        """Show keyboard shortcuts help dialog."""
+        from app.ui.dialogs.shortcuts_dialog import ShortcutsDialog
+        dialog = ShortcutsDialog(self)
+        dialog.exec()
 
 
 # Need kv for logging
