@@ -13,13 +13,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal, QTimer, QEasingCurve, QPropertyAnimation, QSize
+from PySide6.QtCore import Qt, Signal, QTimer, QEasingCurve, QPropertyAnimation, QSize, QMimeData, QPoint
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QSizePolicy, QMenu,
     QGraphicsOpacityEffect, QStackedLayout, QGraphicsDropShadowEffect,
 )
-from PySide6.QtGui import QCursor, QColor, QPixmap
+from PySide6.QtGui import QCursor, QColor, QPixmap, QDrag
 
 from app.models import Game
 from app.services import pixmap_for_game, parse_version, compare_versions, best_icon_path, extract_dominant_color
@@ -65,6 +65,7 @@ class GameCard(QFrame):
         self._last_icon_size = QSize()
         self._selected = False
         self._multi_select_mode = multi_select_mode
+        self._drag_start_pos = None  # For drag-and-drop
         self.setFrameShape(QFrame.StyledPanel)
         self.view_mode = view_mode
         self._theme = current_theme()
@@ -399,12 +400,50 @@ class GameCard(QFrame):
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
+            # Store drag start position for potential drag operation
+            self._drag_start_pos = event.pos()
+
             # In multi-select mode or with Ctrl held, toggle selection
             if self._multi_select_mode or event.modifiers() & Qt.ControlModifier:
                 self.toggle_selection()
             else:
                 self.clicked.emit(self.game.game_id)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        """Handle drag-and-drop initiation."""
+        if not (event.buttons() & Qt.LeftButton) or not self._drag_start_pos:
+            super().mouseMoveEvent(event)
+            return
+
+        # Check if we've moved enough to start a drag
+        if (event.pos() - self._drag_start_pos).manhattanLength() < 10:
+            super().mouseMoveEvent(event)
+            return
+
+        # Start drag operation
+        drag = QDrag(self)
+        mime_data = QMimeData()
+
+        # Store game ID in mime data
+        mime_data.setText(self.game.game_id)
+        mime_data.setData("application/x-game-id", self.game.game_id.encode())
+
+        drag.setMimeData(mime_data)
+
+        # Use the game icon as drag pixmap (scaled down)
+        if hasattr(self, 'icon_label') and self.icon_label.pixmap():
+            pixmap = self.icon_label.pixmap().scaled(
+                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
+
+        # Execute drag
+        drag.exec(Qt.CopyAction)
+        self._drag_start_pos = None
+
+        super().mouseMoveEvent(event)
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)

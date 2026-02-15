@@ -247,3 +247,36 @@ class CollectionMixin:
             self.statusBar().showMessage("Already in that collection.", 2000)
 
         self._apply_search()
+
+    def _on_game_dropped_on_collection(self: "MainWindow", game_id: str, collection_id: str) -> None:
+        """Handle drag-and-drop of game onto collection in sidebar."""
+        g = self._get_game(game_id)
+        if not g:
+            return
+
+        # Find the target collection
+        target = None
+        for c in self._collections:
+            if c.collection_id == collection_id:
+                target = c
+                break
+
+        if not target:
+            return
+
+        # Only allow adding to manual collections via drag-and-drop
+        if target.type != "manual":
+            self.statusBar().showMessage("Can only drag to manual collections", 2000)
+            return
+
+        if not hasattr(target, "game_ids") or target.game_ids is None:
+            target.game_ids = []
+
+        if g.game_id not in target.game_ids:
+            target.game_ids.append(g.game_id)
+            self._persist_library()
+            self.statusBar().showMessage(f"Added '{g.title}' to '{target.name}'", 3000)
+        else:
+            self.statusBar().showMessage(f"'{g.title}' is already in '{target.name}'", 2000)
+
+        self._apply_search()
