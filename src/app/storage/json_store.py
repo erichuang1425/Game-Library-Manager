@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from app.models import Game, Collection
 from app.logging_utils import get_logger, kv
 from app.storage.paths import temp_data_dir
+from app.exceptions import StorageError
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt
 
@@ -22,7 +23,8 @@ def _warn_fallback(fb_path: Path) -> None:
             box.setWindowModality(Qt.NonModal if hasattr(box, "setWindowModality") else 0)
             box.setAttribute(Qt.WA_DeleteOnClose)
             box.show()
-    except Exception:
+    except (RuntimeError, AttributeError):
+        # Silently skip UI notification if QApplication is not available or widget creation fails
         pass
 
 def _dt_to_str(dt: Optional[datetime]) -> Optional[str]:
@@ -83,7 +85,8 @@ def save_library(path: Path, games: List[Game]) -> None:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         _log.info("save_library_done %s", kv(path=path, count=len(games), bytes=path.stat().st_size if path.exists() else 0,
                                              duration_ms=round((time.perf_counter()-start)*1000,1), fallback_used=False))
-    except Exception as e:
+    except (OSError, IOError, PermissionError) as e:
+        # Fallback to temp directory if primary path fails
         fb_dir = temp_data_dir()
         fb_dir.mkdir(parents=True, exist_ok=True)
         fb_path = fb_dir / path.name
@@ -147,7 +150,8 @@ def save_settings(path: Path, settings: Dict[str, Any]) -> None:
     try:
         path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
         _log.info("save_settings_done %s", kv(path=path, keys=len(settings), duration_ms=round((time.perf_counter()-start)*1000,1), fallback_used=False))
-    except Exception as e:
+    except (OSError, IOError, PermissionError) as e:
+        # Fallback to temp directory if primary path fails
         fb_dir = temp_data_dir()
         fb_dir.mkdir(parents=True, exist_ok=True)
         fb_path = fb_dir / path.name
@@ -196,7 +200,8 @@ def save_library_bundle(path: Path, games: List[Game], collections: List[Collect
         _log.info("save_library_bundle_done %s", kv(path=path, games=len(games), collections=len(collections),
                                                     bytes=path.stat().st_size if path.exists() else 0,
                                                     duration_ms=round((time.perf_counter()-start)*1000,1), fallback_used=False))
-    except Exception as e:
+    except (OSError, IOError, PermissionError) as e:
+        # Fallback to temp directory if primary path fails
         fb_dir = temp_data_dir()
         fb_dir.mkdir(parents=True, exist_ok=True)
         fb_path = fb_dir / path.name
