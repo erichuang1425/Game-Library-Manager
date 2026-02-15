@@ -167,6 +167,16 @@ class GameOpsMixin:
             self._remove_game(game_id)
             return
 
+        # Handle status changes from inline card interactions
+        if action.startswith("set_status_"):
+            new_status = action.replace("set_status_", "")
+            if new_status in ["backlog", "playing", "finished", "dropped"]:
+                g.status = new_status
+                self._persist_library()
+                self._apply_search()
+                self.details.show_game(g)
+            return
+
     def _on_game_selected(self: "MainWindow", game_id: str) -> None:
         self._selected_game_id = game_id
         g = self._get_game(game_id)
