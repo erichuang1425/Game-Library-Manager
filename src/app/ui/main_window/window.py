@@ -228,7 +228,8 @@ class MainWindow(
         if isinstance(sizes, list) and len(sizes) == 3:
             splitter.setSizes([int(x) for x in sizes])
         else:
-            splitter.setSizes([220, 820, 0 if not self._details_visible else 340])
+            # Sidebar expanded, details hidden by default to maximize grid space
+            splitter.setSizes([220, self.width() - 220, 0])
 
     def _build_header_bar(self, outer: QVBoxLayout, theme) -> None:
         """Build the slim branded header bar, scaled for DPI and font size."""
@@ -335,7 +336,7 @@ class MainWindow(
         """Build the center content area with context toolbar and grid."""
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(theme.spacing_md, 0, theme.spacing_md, 0)
+        content_layout.setContentsMargins(theme.spacing_lg, 0, theme.spacing_lg, 0)
         content_layout.setSpacing(0)
         content.setMinimumWidth(480)
 
@@ -406,7 +407,7 @@ class MainWindow(
             "last_checked": "Last Checked"
         }.get(self._sort_by, "Title"))
         self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
-        self.sort_combo.setMaximumWidth(120)
+        self.sort_combo.setMaximumWidth(150)
         toolbar.addWidget(self.sort_combo)
 
         # View toggle
@@ -418,7 +419,6 @@ class MainWindow(
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(self._on_view_mode_changed)
-            btn.setMaximumWidth(60)
         toolbar.addWidget(self.view_comfort)
         toolbar.addWidget(self.view_compact)
 
@@ -437,7 +437,6 @@ class MainWindow(
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(self._on_browse_mode_changed)
-            btn.setMaximumWidth(80)
         toolbar.addWidget(self.browse_scroll_btn)
         toolbar.addWidget(self.browse_pages_btn)
 
@@ -463,17 +462,14 @@ class MainWindow(
         filter_row.addWidget(self.tag_filter_label)
         filter_row.addWidget(self.clear_tag_btn)
 
-        # Dropdown filters (compact)
+        # Dropdown filters (compact, no labels — the combo box items are self-explanatory)
         self.status_filter = QComboBox()
         self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
         self.status_filter.setToolTip("Filter by status")
         status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
         self.status_filter.setCurrentText(status_label)
         self.status_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.status_filter.setMaximumWidth(100)
-        st_lbl = QLabel("Status")
-        st_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
-        filter_row.addWidget(st_lbl)
+        self.status_filter.setMaximumWidth(120)
         filter_row.addWidget(self.status_filter)
 
         self.conf_filter = QComboBox()
@@ -482,10 +478,7 @@ class MainWindow(
         confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
         self.conf_filter.setCurrentText(confidence_label)
         self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.conf_filter.setMaximumWidth(90)
-        cf_lbl = QLabel("Confidence")
-        cf_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
-        filter_row.addWidget(cf_lbl)
+        self.conf_filter.setMaximumWidth(110)
         filter_row.addWidget(self.conf_filter)
 
         self.type_filter = QComboBox()
@@ -493,17 +486,14 @@ class MainWindow(
         self.type_filter.setToolTip("Filter by type")
         self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
         self.type_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.type_filter.setMaximumWidth(70)
-        tp_lbl = QLabel("Type")
-        tp_lbl.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 11px; background: transparent; border: none;")
-        filter_row.addWidget(tp_lbl)
+        self.type_filter.setMaximumWidth(90)
         filter_row.addWidget(self.type_filter)
 
         filter_row.addStretch(1)
 
-        # Focus + Details + Select buttons
+        # Panel toggle buttons
         self.focus_btn = QPushButton("Focus")
-        self.focus_btn.setToolTip("Full-width grid")
+        self.focus_btn.setToolTip("Full-width grid (hide sidebar and details)")
         self.focus_btn.setCheckable(True)
         self.focus_btn.setCursor(Qt.PointingHandCursor)
         self.focus_btn.clicked.connect(self._toggle_focus_mode)
@@ -513,7 +503,7 @@ class MainWindow(
 
         self.details_toggle = QToolButton()
         self.details_toggle.setText("Details")
-        self.details_toggle.setToolTip("Show/hide details panel")
+        self.details_toggle.setToolTip("Show/hide details panel (Ctrl+D)")
         self.details_toggle.setCheckable(True)
         self.details_toggle.setChecked(self._details_visible)
         self.details_toggle.clicked.connect(self._toggle_details_panel)
@@ -521,7 +511,7 @@ class MainWindow(
         filter_row.addWidget(self.details_toggle)
 
         self.select_btn = QPushButton("Select")
-        self.select_btn.setToolTip("Multi-select mode")
+        self.select_btn.setToolTip("Multi-select mode (Ctrl+Click)")
         self.select_btn.setCheckable(True)
         self.select_btn.setCursor(Qt.PointingHandCursor)
         self.select_btn.clicked.connect(self._toggle_multi_select_mode)
@@ -632,8 +622,8 @@ class MainWindow(
         details_layout = QVBoxLayout(details)
         details_layout.setContentsMargins(theme.spacing_md, theme.spacing_sm, theme.spacing_md, theme.spacing_sm)
         details_layout.setSpacing(0)
-        details.setMinimumWidth(theme.details_width_min)
-        details.setMaximumWidth(theme.details_width_max)
+        details.setMinimumWidth(280)
+        details.setMaximumWidth(400)
 
         self.details = DetailsPanel()
         self.details.play_clicked.connect(self._on_game_play)

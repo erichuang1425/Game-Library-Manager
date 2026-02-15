@@ -111,7 +111,7 @@ class GameGrid(QWidget):
         self._view_mode = "comfortable"
         self._type_scale = "normal"
         self._resize_timer = QTimer(self)
-        self._resize_timer.setInterval(120)
+        self._resize_timer.setInterval(200)  # debounce resize to reduce layout thrashing
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(wrap_slot(_log, "resize_timeout")(self._render))
         self._rendering = False
@@ -130,7 +130,7 @@ class GameGrid(QWidget):
         # --- Virtual scroll state ---
         self._visible_cards: dict[int, GameCard] = {}  # index -> card widget
         self._scroll_timer = QTimer(self)
-        self._scroll_timer.setInterval(16)  # ~60fps
+        self._scroll_timer.setInterval(50)  # debounce scroll updates (was 16ms — too aggressive)
         self._scroll_timer.setSingleShot(True)
         self._scroll_timer.timeout.connect(self._on_scroll_settle)
         self._last_scroll_range: tuple[int, int] = (0, 0)
@@ -364,12 +364,12 @@ class GameGrid(QWidget):
         total_h = total_rows * (self._est_card_h + gap) + theme.grid_padding * 2
         self.container.setMinimumHeight(max(total_h, viewport.height()))
 
-        # Determine which rows are visible
+        # Determine which rows are visible (3 buffer rows for smoother scrolling)
         scroll_y = self.scroll.verticalScrollBar().value()
         row_h = self._est_card_h + gap
 
-        first_visible_row = max(0, scroll_y // row_h - 2)  # 2 buffer rows above
-        last_visible_row = min(total_rows - 1, (scroll_y + viewport.height()) // row_h + 2)  # 2 buffer below
+        first_visible_row = max(0, scroll_y // row_h - 3)  # 3 buffer rows above
+        last_visible_row = min(total_rows - 1, (scroll_y + viewport.height()) // row_h + 3)  # 3 buffer below
 
         first_idx = first_visible_row * cols
         last_idx = min(len(self._games) - 1, (last_visible_row + 1) * cols - 1)
@@ -382,8 +382,9 @@ class GameGrid(QWidget):
                first_idx=first_idx, last_idx=last_idx, total=len(self._games), cols=cols),
         )
 
-        # Render visible cards
+        # Render visible cards (skip fade-in on scroll to avoid animation overhead)
         reason = self._render_reason or "unknown"
+        should_animate = reason in ("set_games", "init")
         for idx in range(first_idx, last_idx + 1):
             if idx < len(self._games):
                 card = self._create_card(idx, chip_level)
@@ -392,7 +393,7 @@ class GameGrid(QWidget):
                     col = idx % cols
                     self.grid.addWidget(card, row, col)
                     self._visible_cards[idx] = card
-                    if idx < first_idx + 20 and reason in ("set_games", "init"):
+                    if should_animate and idx < first_idx + 20:
                         card.fade_in(delay_ms=((idx - first_idx) % 20) * 25)
 
         # Column stretches
@@ -432,8 +433,8 @@ class GameGrid(QWidget):
         scroll_y = self.scroll.verticalScrollBar().value()
         total_rows = math.ceil(len(self._games) / cols) if self._games else 0
 
-        first_visible_row = max(0, scroll_y // row_h - 2)
-        last_visible_row = min(total_rows - 1, (scroll_y + viewport.height()) // row_h + 2)
+        first_visible_row = max(0, scroll_y // row_h - 3)
+        last_visible_row = min(total_rows - 1, (scroll_y + viewport.height()) // row_h + 3)
 
         first_idx = first_visible_row * cols
         last_idx = min(len(self._games) - 1, (last_visible_row + 1) * cols - 1)
@@ -443,18 +444,15 @@ class GameGrid(QWidget):
         if first_idx == old_first and last_idx == old_last:
             return  # No change needed
 
-        # Only do a full re-render if the ranges differ significantly
+        # Prefer incremental updates when ranges overlap at all
         overlap_start = max(first_idx, old_first)
         overlap_end = min(last_idx, old_last)
         if overlap_end >= overlap_start:
-            overlap = overlap_end - overlap_start + 1
-            new_range = last_idx - first_idx + 1
-            if new_range > 0 and overlap / new_range > 0.7:
-                # Mostly overlapping — do incremental update
-                self._incremental_scroll_update(first_idx, last_idx)
-                return
+            # Any overlap — do incremental update (add/remove only changed cards)
+            self._incremental_scroll_update(first_idx, last_idx)
+            return
 
-        # Significant change — full re-render of visible region
+        # No overlap at all — full re-render of visible region
         self._render_reason = "scroll"
         self._render()
 
