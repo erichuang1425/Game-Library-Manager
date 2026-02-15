@@ -31,7 +31,8 @@ def paths_diag(logger: logging.Logger) -> None:
         base = Path(__file__).resolve()
         proj_root = base.parent.parent.parent
         log = logger.info
-    except Exception:
+    except (OSError, RuntimeError, AttributeError):
+        # Silently skip diagnostic if path resolution fails
         return
     log("paths_diag %s", {
         "cwd": str(Path.cwd()),
