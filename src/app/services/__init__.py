@@ -37,10 +37,11 @@ from .title_matcher import (
 
 # F95zone advanced integration (Phase 6-10)
 from .f95_api import (
-    ThreadInfo, DownloadLink,
+    ThreadInfo, DownloadLink, ExtraLink,
     normalize_f95_url, is_f95_url, extract_thread_id,
     parse_thread_title, extract_download_links, extract_thread_info,
-    derive_title_from_url, group_download_links_by_host
+    derive_title_from_url, group_download_links_by_host,
+    get_best_download_link, get_host_display_info, get_cached_thread_info,
 )
 from .f95_auth import (
     F95AuthManager, AuthResult, SessionInfo,

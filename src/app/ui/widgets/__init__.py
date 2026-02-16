@@ -15,3 +15,4 @@ from .search_bar import (
 )
 from .downloads_panel import DownloadsPanel, DownloadItemWidget
 from .password_manager import PasswordManagerWidget
+from .game_home_page import GameHomePage
