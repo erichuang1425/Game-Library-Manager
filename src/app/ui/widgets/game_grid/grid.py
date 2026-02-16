@@ -127,6 +127,10 @@ class GameGrid(QWidget):
         self._current_page: int = 0         # 0-indexed current page
         self._total_pages: int = 1
 
+        # --- Viewport retry state ---
+        self._viewport_retry_count: int = 0
+        self._VIEWPORT_MAX_RETRIES: int = 5
+
         # --- Virtual scroll state ---
         self._visible_cards: dict[int, GameCard] = {}  # index -> card widget
         self._scroll_timer = QTimer(self)
@@ -138,6 +142,12 @@ class GameGrid(QWidget):
         self._current_cols: int = 1
         self._current_card_w: int = 260
         self._current_chip_level: str = "medium"
+
+        # Coalesce rapid set_games calls into a single deferred render
+        self._set_games_timer = QTimer(self)
+        self._set_games_timer.setSingleShot(True)
+        self._set_games_timer.setInterval(16)  # ~1 frame
+        self._set_games_timer.timeout.connect(self._render)
 
         # Connect scroll events for virtual scrolling
         self.scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_value_changed)
@@ -159,12 +169,6 @@ class GameGrid(QWidget):
         self._total_pages = max(1, math.ceil(len(self._games) / self._page_size)) if self._games else 1
         if self._current_page >= self._total_pages:
             self._current_page = max(0, self._total_pages - 1)
-        # Coalesce rapid set_games calls into a single deferred render
-        if not hasattr(self, '_set_games_timer'):
-            self._set_games_timer = QTimer(self)
-            self._set_games_timer.setSingleShot(True)
-            self._set_games_timer.setInterval(16)  # ~1 frame
-            self._set_games_timer.timeout.connect(self._render)
         self._set_games_timer.start()
 
     def set_view_mode(self, mode: str) -> None:
@@ -353,10 +357,15 @@ class GameGrid(QWidget):
 
         viewport = self.scroll.viewport().size()
         if viewport.width() <= 0 or viewport.height() <= 0:
-            if self._rate.allow("render_invalid_view", interval_ms=500):
-                _log.warning("render_skip %s", kv(reason="viewport_invalid"))
-            QTimer.singleShot(100, self._render)
+            self._viewport_retry_count += 1
+            if self._viewport_retry_count <= self._VIEWPORT_MAX_RETRIES:
+                if self._rate.allow("render_invalid_view", interval_ms=500):
+                    _log.warning("render_skip %s", kv(reason="viewport_invalid", retry=self._viewport_retry_count))
+                QTimer.singleShot(100, self._render)
+            else:
+                _log.warning("render_abandon %s", kv(reason="viewport_invalid_max_retries"))
             return
+        self._viewport_retry_count = 0
 
         cols, card_w, chip_level = self._compute_layout()
         self._current_cols = cols
@@ -508,10 +517,15 @@ class GameGrid(QWidget):
 
         viewport = self.scroll.viewport().size()
         if viewport.width() <= 0 or viewport.height() <= 0:
-            if self._rate.allow("render_invalid_view", interval_ms=500):
-                _log.warning("render_skip %s", kv(reason="viewport_invalid"))
-            QTimer.singleShot(100, self._render)
+            self._viewport_retry_count += 1
+            if self._viewport_retry_count <= self._VIEWPORT_MAX_RETRIES:
+                if self._rate.allow("render_invalid_view", interval_ms=500):
+                    _log.warning("render_skip %s", kv(reason="viewport_invalid", retry=self._viewport_retry_count))
+                QTimer.singleShot(100, self._render)
+            else:
+                _log.warning("render_abandon %s", kv(reason="viewport_invalid_max_retries"))
             return
+        self._viewport_retry_count = 0
 
         cols, card_w, chip_level = self._compute_layout()
         self._current_cols = cols

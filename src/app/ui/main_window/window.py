@@ -624,7 +624,7 @@ class MainWindow(
         details_layout = QVBoxLayout(details)
         details_layout.setContentsMargins(theme.spacing_md, theme.spacing_sm, theme.spacing_md, theme.spacing_sm)
         details_layout.setSpacing(0)
-        details.setMinimumWidth(280)
+        details.setMinimumWidth(260)
         details.setMaximumWidth(400)
 
         self.details = DetailsPanel()

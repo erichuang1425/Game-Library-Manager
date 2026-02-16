@@ -242,6 +242,11 @@ class LibrarySidebar(QWidget):
             # Set minimum width to collapsed width for smooth animation in both directions
             self.setMinimumWidth(self._collapsed_width)
             self._width_anim.stop()
+            # Disconnect any previous finished handler to prevent stacking
+            try:
+                self._width_anim.finished.disconnect()
+            except (RuntimeError, TypeError):
+                pass
             self._width_anim.setStartValue(self.maximumWidth())
             self._width_anim.setEndValue(target_width)
             self._width_anim.finished.connect(
@@ -413,21 +418,26 @@ class LibrarySidebar(QWidget):
     def resizeEvent(self, event) -> None:
         """Refresh item labels on resize to re-elide text for current width."""
         super().resizeEvent(event)
-        if not self._collapsed:
-            # Update elision for current width
-            fm = self.list.fontMetrics()
-            max_w = max(120, self.list.viewport().width() - 24)
-            for i in range(self.list.count()):
-                item = self.list.item(i)
-                if not item:
-                    continue
-                tooltip = item.toolTip()
-                key = item.data(Qt.UserRole)
-                if not key or not tooltip:
-                    continue  # Skip section headers
-                elided = fm.elidedText(tooltip, Qt.ElideRight, max_w)
-                if elided != item.text():
-                    item.setText(elided)
+        if self._collapsed:
+            return
+        # Only re-elide if width actually changed
+        new_w = self.list.viewport().width()
+        if new_w == getattr(self, '_last_elide_width', -1):
+            return
+        self._last_elide_width = new_w
+        fm = self.list.fontMetrics()
+        max_w = max(120, new_w - 24)
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            if not item:
+                continue
+            tooltip = item.toolTip()
+            key = item.data(Qt.UserRole)
+            if not key or not tooltip:
+                continue  # Skip section headers
+            elided = fm.elidedText(tooltip, Qt.ElideRight, max_w)
+            if elided != item.text():
+                item.setText(elided)
 
     # Sidebar expand/collapse is controlled only by the toggle button,
     # not by hover, to prevent accidental distracting layout shifts.

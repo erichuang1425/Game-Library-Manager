@@ -93,7 +93,8 @@ class GameCard(QFrame):
 
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        assert self.parent() is not None, "GameCard requires a parent; prevents floating windows."
+        if self.parent() is None:
+            _log.warning("card_no_parent %s", kv(game_id=game.game_id, title=game.title))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(pad, pad, pad, pad)
@@ -842,8 +843,20 @@ class GameCard(QFrame):
 
         # Restore shadow effect after fade completes
         def restore_shadow():
-            if hasattr(self, '_shadow_effect'):
-                self.setGraphicsEffect(self._shadow_effect)
+            from shiboken6 import isValid
+            if not isValid(self):
+                return
+            if hasattr(self, '_shadow_effect') and self._shadow_effect:
+                # Re-create shadow since the old one was destroyed by setGraphicsEffect
+                shadow = QGraphicsDropShadowEffect(self)
+                shadow.setBlurRadius(16)
+                shadow.setOffset(0, 3)
+                shadow.setColor(QColor(
+                    self._theme.shadow.red(), self._theme.shadow.green(),
+                    self._theme.shadow.blue(), self._theme.elevation_low,
+                ))
+                self._shadow_effect = shadow
+                self.setGraphicsEffect(shadow)
 
         self._fade_anim.finished.connect(restore_shadow)
 
