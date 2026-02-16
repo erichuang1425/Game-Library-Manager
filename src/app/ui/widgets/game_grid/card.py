@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QCursor, QColor, QPixmap, QDrag
 
 from app.models import Game
-from app.services import pixmap_for_game, parse_version, compare_versions, best_icon_path, extract_dominant_color
+from app.services import pixmap_for_game, parse_version, compare_versions, best_icon_path, extract_dominant_color, request_icon_async
 from app.services.color_extractor import get_cached_dominant_color
 from app.services.version_parser import CompareResult
 from app.ui.theme import current_theme, card_style, chip_style, is_reduced_motion, status_color
@@ -132,17 +132,16 @@ class GameCard(QFrame):
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.icon_label.setScaledContents(False)
         self.icon_label.setStyleSheet("border: none; background: transparent;")
-        # Defer icon loading to avoid blocking the UI thread during card creation.
-        # QFileIconProvider.icon() can be very slow for .lnk files whose targets
-        # are missing or on slow storage.  Show a placeholder immediately and
-        # stagger the real pixmap loads so they arrive progressively rather than
-        # all firing in one burst that freezes the UI.
-        global _deferred_icon_counter
+        # Show a placeholder immediately and load the real icon asynchronously
+        # in a background thread.  QFileIconProvider.icon() can block for
+        # seconds on Windows .lnk files whose targets are slow/missing, so
+        # the background thread prevents the UI from freezing.
         self._set_placeholder_pixmap()
         self._deferred_icon_height = icon_height
-        delay = _deferred_icon_counter * _ICON_STAGGER_MS
-        _deferred_icon_counter += 1
-        QTimer.singleShot(delay, self._deferred_load_icon)
+        self._icon_load_pending = True
+        # Schedule async icon load on next event-loop tick so the card is
+        # fully constructed before the callback can fire.
+        QTimer.singleShot(0, self._request_async_icon)
         base_layout.addWidget(self.icon_label)
 
         self._ambient_color: QColor | None = None
@@ -675,8 +674,53 @@ class GameCard(QFrame):
             )
 
     # ---- Icon and rendering methods ----
+    def _request_async_icon(self) -> None:
+        """Submit an async icon load request to the background thread."""
+        from shiboken6 import isValid
+        if not isValid(self):
+            return
+        if not getattr(self, '_icon_load_pending', False):
+            return
+        # Determine candidate paths without calling Path.exists() (which can
+        # also block on slow storage).  The async worker will resolve via
+        # QFileIconProvider which handles missing files gracefully.
+        shortcut = getattr(self.game, "shortcut_path", "") or ""
+        backup = getattr(self.game, "backup_target_path", "") or ""
+        archive = getattr(self.game, "archive_folder_path", "") or ""
+        compressed = getattr(self.game, "compressed_archive_path", "") or ""
+        icon_path = shortcut or backup or archive or compressed
+        if not icon_path:
+            self._icon_load_pending = False
+            return
+        height = getattr(self, '_deferred_icon_height', 143)
+        target = self.icon_frame.size()
+        target_size = max(96, target.height(), target.width(), height)
+        request_icon_async(icon_path, target_size, self._on_async_icon_ready)
+
+    def _on_async_icon_ready(self, path: str, pm) -> None:
+        """Callback from the async icon loader (runs on main thread)."""
+        from shiboken6 import isValid
+        if not isValid(self):
+            return
+        self._icon_load_pending = False
+        if pm is not None and not pm.isNull():
+            target = self.icon_frame.size()
+            if target.width() > 0 and target.height() > 0:
+                scaled = pm.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            else:
+                scaled = pm
+            self.icon_label.setPixmap(scaled)
+            if _icon_rate.allow(f"async_ok:{self.game.game_id}", interval_ms=2000):
+                _log.debug("async_icon_set %s", kv(game_id=self.game.game_id, path=path))
+        else:
+            if self.game.game_id not in _icon_failures:
+                _icon_failures.add(self.game.game_id)
+                _log.error("icon_null %s", kv(game_id=self.game.game_id, path=path))
+            self._set_placeholder_pixmap()
+        self._extract_ambient_color()
+
     def _deferred_load_icon(self) -> None:
-        """Load the real icon pixmap after the event loop returns."""
+        """Load the real icon pixmap after the event loop returns (legacy sync path)."""
         if not hasattr(self, '_deferred_icon_height'):
             return
         height = self._deferred_icon_height
