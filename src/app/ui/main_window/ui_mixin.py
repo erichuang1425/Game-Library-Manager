@@ -111,7 +111,10 @@ class UIMixin:
     def _apply_focus_mode(self: "MainWindow", initial: bool = False) -> None:
         if self._focus_mode:
             self._details_widget.hide()
-            self._splitter.setSizes([220, max(800, self.width() - 260), 0])
+            # Use actual sidebar width (may be collapsed to 48px)
+            sidebar_w = self._splitter.sizes()[0] if len(self._splitter.sizes()) == 3 else 220
+            sidebar_w = min(sidebar_w, 220)  # Cap at default expanded width
+            self._splitter.setSizes([sidebar_w, max(800, self.width() - sidebar_w - 40), 0])
         else:
             self._details_widget.show()
             if not initial:
