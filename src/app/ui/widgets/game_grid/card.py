@@ -127,11 +127,16 @@ class GameCard(QFrame):
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.icon_label.setScaledContents(False)
         self.icon_label.setStyleSheet("border: none; background: transparent;")
-        self._set_icon_pixmap(icon_height)
+        # Defer icon loading to avoid blocking the UI thread during card creation.
+        # QFileIconProvider.icon() can be very slow for .lnk files whose targets
+        # are missing or on slow storage.  Show a placeholder immediately and
+        # schedule the real pixmap load for after the event loop returns.
+        self._set_placeholder_pixmap()
+        self._deferred_icon_height = icon_height
+        QTimer.singleShot(0, self._deferred_load_icon)
         base_layout.addWidget(self.icon_label)
 
         self._ambient_color: QColor | None = None
-        self._extract_ambient_color()
 
         # Overlay for selection checkbox + update badge
         badge_overlay = QWidget()
@@ -661,6 +666,15 @@ class GameCard(QFrame):
             )
 
     # ---- Icon and rendering methods ----
+    def _deferred_load_icon(self) -> None:
+        """Load the real icon pixmap after the event loop returns."""
+        if not hasattr(self, '_deferred_icon_height'):
+            return
+        height = self._deferred_icon_height
+        del self._deferred_icon_height
+        self._set_icon_pixmap(height)
+        self._extract_ambient_color()
+
     def _refresh_icon_pixmap(self) -> None:
         # Break potential resize->setPixmap->resize recursion by updating after the event loop returns.
         self._icon_update_scheduled = False
