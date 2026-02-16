@@ -576,9 +576,9 @@ class MainWindow(
         self.health.hide()
         self.updates.hide()
 
-        self._rebuild_sidebar()
-
-        # Keep hidden collection buttons for backward compatibility with mixins
+        # Keep hidden collection buttons for backward compatibility with mixins.
+        # Must be created before _rebuild_sidebar() because sidebar population
+        # emits nav_changed which calls _on_nav_changed, which accesses these.
         self.new_collection_btn = QPushButton()
         self.new_collection_btn.hide()
         self.add_to_collection_btn = QPushButton()
@@ -587,6 +587,8 @@ class MainWindow(
         self.rename_collection_btn.hide()
         self.delete_collection_btn = QPushButton()
         self.delete_collection_btn.hide()
+
+        self._rebuild_sidebar()
 
         return content
 
