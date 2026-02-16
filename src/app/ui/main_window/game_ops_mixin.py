@@ -323,6 +323,10 @@ class GameOpsMixin:
             if tid:
                 thread_info = get_cached_thread_info(tid)
 
+        # Persist banner URL from thread info to game model for future cache hits
+        if thread_info and thread_info.banner_url and not g.banner_url:
+            g.banner_url = thread_info.banner_url
+
         # Get custom XPaths from settings if available
         from app.models.custom_paths import CustomXPaths
         custom_xpaths = None

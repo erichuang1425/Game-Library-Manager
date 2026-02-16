@@ -47,6 +47,8 @@ class Game:
     # Icon quality tracking
     icon_upscaled: bool = False          # True once a high-quality icon has been cached
     dominant_color_hex: str = ""         # cached hex color from icon, e.g. "#3a7bd5"
+    banner_url: str = ""                 # URL of the banner image from source thread
+    banner_image_path: str = ""          # local cached path to fetched banner image
 
     # F95zone integration (Phase 6-10)
     f95_thread_id: Optional[int] = None  # F95zone thread ID
