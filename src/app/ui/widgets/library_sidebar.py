@@ -201,8 +201,12 @@ class LibrarySidebar(QWidget):
             self._add_nav_item(AppIcons.NAV_UPDATES, "Updates", updates_count, "updates", fm, max_w)
             self._add_nav_item(AppIcons.NAV_HEALTH, "Health Checks", health_count, "health", fm, max_w)
 
-        self.list.blockSignals(False)
+        # Select the item while signals are still blocked.  Callers always
+        # handle state updates (e.g. _apply_search) explicitly, so emitting
+        # nav_changed here would be redundant and can crash during init when
+        # widgets like _footer_count don't exist yet.
         self.set_selected(selected_key)
+        self.list.blockSignals(False)
 
     def update_counts(self, all_count: int, updates_count: int, health_count: int) -> None:
         key = self.current_key() or "all"

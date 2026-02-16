@@ -588,13 +588,7 @@ class MainWindow(
         self.delete_collection_btn = QPushButton()
         self.delete_collection_btn.hide()
 
-        # Suppress grid renders during sidebar population.  _rebuild_sidebar
-        # triggers the nav_changed → _on_nav_changed → _apply_search → _render
-        # chain, but there is no data to render yet — _finalize_startup will
-        # do the authoritative first render after all config is applied.
-        self.grid._render_suppressed = True
         self._rebuild_sidebar()
-        self.grid._render_suppressed = False
 
         return content
 
@@ -674,6 +668,8 @@ class MainWindow(
 
     def update_footer(self) -> None:
         """Update footer bar with current counts and filter info."""
+        if not hasattr(self, '_footer_count'):
+            return
         total = len(self._all_games)
         shown = len(self._filtered)
         if total == shown:
