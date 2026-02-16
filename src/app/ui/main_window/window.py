@@ -588,7 +588,13 @@ class MainWindow(
         self.delete_collection_btn = QPushButton()
         self.delete_collection_btn.hide()
 
+        # Suppress grid renders during sidebar population.  _rebuild_sidebar
+        # triggers the nav_changed → _on_nav_changed → _apply_search → _render
+        # chain, but there is no data to render yet — _finalize_startup will
+        # do the authoritative first render after all config is applied.
+        self.grid._render_suppressed = True
         self._rebuild_sidebar()
+        self.grid._render_suppressed = False
 
         return content
 
@@ -691,6 +697,12 @@ class MainWindow(
 
     def _finalize_startup(self) -> None:
         """Finalize startup: apply modes, render, show status."""
+        # Suppress grid renders while we bulk-apply saved config.  Each of the
+        # calls below (focus mode, details, view mode, browse mode) would
+        # individually trigger a full grid render.  We suppress until the end
+        # and do a single render.
+        self.grid._render_suppressed = True
+
         self._apply_focus_mode(initial=True)
         if self._details_on_launch:
             self._details_visible = True
@@ -713,6 +725,8 @@ class MainWindow(
         self._apply_filter_combo_defaults()
         self._apply_responsive_type()
 
+        # Un-suppress and do the single authoritative startup render.
+        self.grid._render_suppressed = False
         first_render_start = time.perf_counter()
         self._render()
         if not self._all_games:
