@@ -35,6 +35,11 @@ _log = get_logger("ui.game_card")
 _icon_rate = RateLimiter()
 _icon_failures: set[str] = set()
 
+# Stagger deferred icon loads so they don't all fire in one burst.
+# Each new card gets a progressively larger delay (reset when grid re-renders).
+_deferred_icon_counter: int = 0
+_ICON_STAGGER_MS: int = 4  # ms between each card's icon load
+
 
 class GameCard(QFrame):
     """Interactive game card widget with hover overlay and actions."""
@@ -130,10 +135,14 @@ class GameCard(QFrame):
         # Defer icon loading to avoid blocking the UI thread during card creation.
         # QFileIconProvider.icon() can be very slow for .lnk files whose targets
         # are missing or on slow storage.  Show a placeholder immediately and
-        # schedule the real pixmap load for after the event loop returns.
+        # stagger the real pixmap loads so they arrive progressively rather than
+        # all firing in one burst that freezes the UI.
+        global _deferred_icon_counter
         self._set_placeholder_pixmap()
         self._deferred_icon_height = icon_height
-        QTimer.singleShot(0, self._deferred_load_icon)
+        delay = _deferred_icon_counter * _ICON_STAGGER_MS
+        _deferred_icon_counter += 1
+        QTimer.singleShot(delay, self._deferred_load_icon)
         base_layout.addWidget(self.icon_label)
 
         self._ambient_color: QColor | None = None

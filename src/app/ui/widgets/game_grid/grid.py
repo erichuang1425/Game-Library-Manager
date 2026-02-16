@@ -170,7 +170,9 @@ class GameGrid(QWidget):
     def set_view_mode(self, mode: str) -> None:
         if mode not in ("comfortable", "compact"):
             return
-        if mode != self._view_mode and self._rate.allow("view_mode", interval_ms=1000):
+        if mode == self._view_mode:
+            return
+        if self._rate.allow("view_mode", interval_ms=1000):
             _log.info("view_mode_changed %s", kv(mode=mode))
         self._render_reason = "view_mode"
         self._view_mode = mode
@@ -264,6 +266,11 @@ class GameGrid(QWidget):
 
     def _clear_grid(self) -> None:
         self._visible_cards.clear()
+        # Reset the deferred-icon stagger counter so the next batch of cards
+        # starts with zero delay.
+        from .card import _deferred_icon_counter
+        import app.ui.widgets.game_grid.card as _card_mod
+        _card_mod._deferred_icon_counter = 0
         while self.grid.count():
             item = self.grid.takeAt(0)
             w = item.widget()
@@ -285,6 +292,10 @@ class GameGrid(QWidget):
                 _log.warning("render_skip %s", kv(reason="invalid_qobject"))
             self._rendering = False
             self._render_pending = False
+            return
+        # Allow callers to suppress renders during bulk configuration.
+        if getattr(self, '_render_suppressed', False):
+            self._render_pending = True
             return
         if self._rendering:
             if self._rate.allow("render_reentry", interval_ms=400):

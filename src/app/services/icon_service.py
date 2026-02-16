@@ -21,10 +21,12 @@ _BASE_ICON_SIZE = 512
 @lru_cache(maxsize=2048)
 def _icon_for_path_cached(path: str) -> QIcon:
     start = time.perf_counter()
-    p = Path(path)
-    if not path or not p.exists():
+    if not path:
         return QIcon()
-    ico = _icon_provider.icon(QFileInfo(str(p)))
+    # Skip the redundant Path.exists() check — callers already filter via
+    # best_icon_path / _first_existing.  The QFileIconProvider will return a
+    # generic icon for missing files which we already handle as a null pixmap.
+    ico = _icon_provider.icon(QFileInfo(path))
     if _rate.allow("icon_base_miss", 800):
         _log.debug("icon_base_miss %s", kv(path=path, duration_ms=round((time.perf_counter() - start) * 1000, 1)))
     return ico
@@ -73,11 +75,24 @@ def pixmap_for_path(path: str, size: int = 32) -> QPixmap:
 
 # ---- higher-level helpers ----
 
+# Cache Path.exists() results to avoid redundant stat() syscalls.
+# Games typically reference the same shortcut/archive paths across renders.
+@lru_cache(maxsize=4096)
+def _path_exists_cached(p: str) -> bool:
+    return Path(p).exists()
+
+
 def _first_existing(paths: Iterable[str]) -> Optional[str]:
     for p in paths:
-        if p and Path(p).exists():
-            return str(Path(p))
+        if p and _path_exists_cached(p):
+            return p
     return None
+
+
+@lru_cache(maxsize=2048)
+def _best_icon_path_cached(shortcut: str, backup: str, archive: str, compressed: str) -> str:
+    best = _first_existing([shortcut, backup, archive, compressed]) or (shortcut or backup or archive or compressed)
+    return best or ""
 
 
 def best_icon_path(game) -> str:
@@ -94,8 +109,7 @@ def best_icon_path(game) -> str:
     backup = getattr(game, "backup_target_path", "") or ""
     archive = getattr(game, "archive_folder_path", "") or ""
     compressed = getattr(game, "compressed_archive_path", "") or ""
-    best = _first_existing([shortcut, backup, archive, compressed]) or (shortcut or backup or archive or compressed)
-    return best or ""
+    return _best_icon_path_cached(shortcut, backup, archive, compressed)
 
 
 def pixmap_for_game(game, size: int = 32) -> QPixmap:
@@ -113,3 +127,5 @@ def clear_icon_caches() -> None:
     _icon_for_path_cached.cache_clear()
     _raw_pixmap_cached.cache_clear()
     _scaled_pixmap_cached.cache_clear()
+    _path_exists_cached.cache_clear()
+    _best_icon_path_cached.cache_clear()
