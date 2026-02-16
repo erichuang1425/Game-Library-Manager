@@ -183,6 +183,9 @@ class GameOpsMixin:
         self.details.show_game(g)
         self.add_to_collection_btn.setEnabled(True)
         self._ensure_details_visible()
+        # Open game homepage
+        if g is not None:
+            self._show_game_homepage(game_id)
 
     def _on_game_play(self: "MainWindow", game_id: str) -> None:
         g = self._get_game(game_id)
@@ -299,3 +302,64 @@ class GameOpsMixin:
         self.sidebar.set_selected("updates")
         self.updates.set_games(self._all_games)
         self.updates.highlight_game(game_id)
+
+    # ---- Game Homepage navigation ----
+
+    def _show_game_homepage(self: "MainWindow", game_id: str) -> None:
+        """Navigate to the game homepage view for a specific game."""
+        g = self._get_game(game_id)
+        if g is None:
+            return
+
+        self._log.info("game_homepage_open %s", kv(game_id=game_id, title=g.title))
+
+        # Try to get cached thread info if source URL exists
+        thread_info = None
+        if g.source_url:
+            from app.services.f95_api import (
+                extract_thread_id, get_cached_thread_info,
+            )
+            tid = g.f95_thread_id or extract_thread_id(g.source_url)
+            if tid:
+                thread_info = get_cached_thread_info(tid)
+
+        # Get custom XPaths from settings if available
+        from app.models.custom_paths import CustomXPaths
+        custom_xpaths = None
+        custom_data = self._settings.get("custom_xpaths")
+        if isinstance(custom_data, dict):
+            custom_xpaths = CustomXPaths.from_dict(custom_data)
+
+        # Hide grid/health/updates and show homepage
+        self.grid.hide()
+        self.health.hide()
+        self.updates.hide()
+        self.game_home.show()
+
+        # Hide the toolbar and filter rows for a clean homepage look
+        self._homepage_toolbar_visible = True
+        # Update content title
+        self.content_title.setText(g.title)
+
+        # Populate homepage
+        self.game_home.show_game(g, thread_info=thread_info, custom_xpaths=custom_xpaths)
+
+    def _on_homepage_back(self: "MainWindow") -> None:
+        """Navigate back from game homepage to the grid view."""
+        self._log.info("game_homepage_back")
+        self.game_home.hide()
+        self.grid.show()
+        # Restore content title
+        if self._active_collection_id:
+            c = self._get_collection(self._active_collection_id)
+            self.content_title.setText(c.name if c else "Collection")
+        else:
+            self.content_title.setText("All Games")
+
+    def _on_homepage_download(self: "MainWindow", game_id: str, url: str) -> None:
+        """Handle download request from game homepage."""
+        import webbrowser as _wb
+        self._log.info("homepage_download %s", kv(game_id=game_id, url=url[:80]))
+        # Open in browser as a fallback; the download manager can be wired here
+        _wb.open(url)
+        self.statusBar().showMessage(f"Opening download link\u2026", 3000)

@@ -127,6 +127,11 @@ class CollectionMixin:
         grid = getattr(self, "grid", None)
         health = getattr(self, "health", None)
         updates = getattr(self, "updates", None)
+        game_home = getattr(self, "game_home", None)
+
+        # Always hide game homepage when navigating via sidebar
+        if game_home:
+            game_home.hide()
 
         if key == "health":
             self.rename_collection_btn.setEnabled(False)

@@ -106,6 +106,20 @@ class ThreadInfo:
     thread_date: str = ""
     likes: int = 0
     replies: int = 0
+    # Extended homepage fields
+    banner_url: str = ""
+    description: str = ""  # Full first-post description (longer than overview)
+    cheat_codes: str = ""
+    extras: List["ExtraLink"] = field(default_factory=list)
+    genre_tags: List[str] = field(default_factory=list)  # Distinct from thread tags
+
+
+@dataclass
+class ExtraLink:
+    """An extra downloadable resource (walkthrough, mod, cheat, save file)."""
+    url: str
+    label: str = ""
+    category: str = ""  # walkthrough, mod, save, patch, cheat, other
 
 
 @dataclass
@@ -321,6 +335,109 @@ def extract_download_links(html_text: str) -> List[DownloadLink]:
     return links
 
 
+def _extract_spoiler_content(
+    doc, info: ThreadInfo, field: str,
+    keywords: List[str],
+) -> None:
+    """Extract text from spoiler blocks whose title matches any keyword."""
+    spoiler_xpaths = [
+        "//div[contains(@class,'bbCodeSpoiler')]",
+    ]
+    for xpath in spoiler_xpaths:
+        try:
+            spoilers = doc.xpath(xpath)
+            for spoiler in spoilers:
+                # Check spoiler button title
+                titles = spoiler.xpath(
+                    ".//span[contains(@class,'bbCodeSpoiler-button-title')]/text()"
+                )
+                title_text = " ".join(t.strip().lower() for t in titles if isinstance(t, str))
+                if not title_text:
+                    # Check the button text itself
+                    btn_texts = spoiler.xpath(
+                        ".//button[contains(@class,'bbCodeSpoiler-button')]/text()"
+                    )
+                    title_text = " ".join(t.strip().lower() for t in btn_texts if isinstance(t, str))
+
+                if any(kw in title_text for kw in keywords):
+                    content_nodes = spoiler.xpath(
+                        ".//div[contains(@class,'bbCodeBlock-content')]"
+                    )
+                    if content_nodes:
+                        text = content_nodes[0].text_content().strip()[:3000]
+                        setattr(info, field, text)
+                        return
+        except Exception:
+            continue
+
+
+def _extract_extra_links(doc) -> List[ExtraLink]:
+    """Extract links from spoiler blocks for walkthroughs, mods, saves, patches."""
+    extras = []
+    seen_urls = set()
+
+    category_keywords = {
+        "walkthrough": ["walkthrough", "walk through", "guide", "wt"],
+        "mod": ["mod", "modification", "patch"],
+        "save": ["save", "savefile", "save file", "100%"],
+        "cheat": ["cheat", "trainer", "hack"],
+    }
+
+    spoiler_xpaths = [
+        "//div[contains(@class,'bbCodeSpoiler')]",
+    ]
+
+    for xpath in spoiler_xpaths:
+        try:
+            spoilers = doc.xpath(xpath)
+            for spoiler in spoilers:
+                titles = spoiler.xpath(
+                    ".//span[contains(@class,'bbCodeSpoiler-button-title')]/text()"
+                )
+                title_text = " ".join(
+                    t.strip().lower() for t in titles if isinstance(t, str)
+                )
+                if not title_text:
+                    btn_texts = spoiler.xpath(
+                        ".//button[contains(@class,'bbCodeSpoiler-button')]/text()"
+                    )
+                    title_text = " ".join(
+                        t.strip().lower() for t in btn_texts if isinstance(t, str)
+                    )
+
+                # Determine category
+                category = "other"
+                for cat, kws in category_keywords.items():
+                    if any(kw in title_text for kw in kws):
+                        category = cat
+                        break
+
+                if category == "other":
+                    continue  # Only extract recognized extra categories
+
+                # Extract links from this spoiler
+                content_nodes = spoiler.xpath(
+                    ".//div[contains(@class,'bbCodeBlock-content')]//a[@href]"
+                )
+                for a in content_nodes:
+                    href = a.get("href", "")
+                    if not href or href in seen_urls:
+                        continue
+                    if href.startswith("javascript:") or href == "#":
+                        continue
+                    label = a.text_content().strip()[:200] if a.text_content() else ""
+                    extras.append(ExtraLink(
+                        url=href,
+                        label=label or title_text.title(),
+                        category=category,
+                    ))
+                    seen_urls.add(href)
+        except Exception:
+            continue
+
+    return extras
+
+
 def extract_thread_info(html_text: str, url: str) -> ThreadInfo:
     """
     Extract comprehensive thread information from HTML.
@@ -410,6 +527,43 @@ def extract_thread_info(html_text: str, url: str) -> ThreadInfo:
         # Extract download links
         info.download_links = extract_download_links(html_text)
 
+        # Extract full description (first post body, longer than overview)
+        try:
+            desc_xpaths = [
+                "//article[contains(@class,'message')][1]//div[contains(@class,'bbWrapper')]",
+            ]
+            for xpath in desc_xpaths:
+                nodes = doc.xpath(xpath)
+                if nodes:
+                    # Collect full text, preserving some structure
+                    full_text = nodes[0].text_content().strip()
+                    info.description = full_text[:5000]
+                    break
+        except Exception:
+            pass
+
+        # Extract banner image (first large image in first post)
+        try:
+            banner_xpaths = [
+                "//article[contains(@class,'message')][1]//div[contains(@class,'bbWrapper')]//img/@src",
+                "//article[contains(@class,'message')][1]//div[contains(@class,'bbWrapper')]//img/@data-src",
+            ]
+            for xpath in banner_xpaths:
+                imgs = doc.xpath(xpath)
+                for img_url in imgs:
+                    if isinstance(img_url, str) and img_url.strip():
+                        img_url = img_url.strip()
+                        # Skip tiny icons, emojis, smilies
+                        if any(skip in img_url.lower() for skip in
+                               ["smilie", "emoji", "icon", "avatar", "1x1", "pixel"]):
+                            continue
+                        info.banner_url = img_url
+                        break
+                if info.banner_url:
+                    break
+        except Exception:
+            pass
+
         # Extract changelog (look for Changelog/What's New sections)
         try:
             spoiler_xpaths = [
@@ -424,6 +578,44 @@ def extract_thread_info(html_text: str, url: str) -> ThreadInfo:
                         break
                 if info.changelog:
                     break
+        except Exception:
+            pass
+
+        # Extract cheat codes from spoiler blocks
+        try:
+            _extract_spoiler_content(
+                doc, info, "cheat_codes",
+                keywords=["cheat", "code", "console", "hack"],
+            )
+        except Exception:
+            pass
+
+        # Extract extra links (walkthroughs, mods, saves, patches)
+        try:
+            info.extras = _extract_extra_links(doc)
+        except Exception:
+            pass
+
+        # Extract genre tags (from the tag bar, distinct list)
+        try:
+            for tag in info.tags:
+                tag_lower = tag.lower()
+                genre_keywords = [
+                    "2d game", "3d game", "2dcg", "3dcg", "adventure",
+                    "animation", "anal", "big ass", "big tits",
+                    "dating sim", "fantasy", "female protagonist",
+                    "handjob", "harem", "humor", "incest",
+                    "kinetic novel", "male protagonist", "management",
+                    "milf", "mobile game", "monster", "multiple endings",
+                    "ntr", "oral sex", "parody", "point & click",
+                    "puzzle", "real porn", "romance", "rpg",
+                    "sandbox", "school setting", "sci-fi", "simulator",
+                    "ren'py", "rpgm", "unity", "unreal engine",
+                    "trainer", "turn based combat", "vaginal sex",
+                    "visual novel", "voyeurism",
+                ]
+                if tag_lower in genre_keywords:
+                    info.genre_tags.append(tag)
         except Exception:
             pass
 

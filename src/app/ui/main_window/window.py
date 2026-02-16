@@ -19,7 +19,7 @@ from app.storage import library_json_path, settings_json_path
 from app.logging_utils import connect_safe, get_logger, kv, RateLimiter, wrap_slot
 from app.ui.widgets import (
     GameGrid, DetailsPanel, FilterChipsBar, BatchToolbar,
-    HealthChecksWidget, UpdatesWidget,
+    HealthChecksWidget, UpdatesWidget, GameHomePage,
 )
 from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.theme import (
@@ -568,13 +568,23 @@ class MainWindow(
         self.updates.open_source_requested.connect(self._open_source_for_game)
         self.updates.mark_installed_requested.connect(self._mark_installed_from_source)
 
+        # Game Homepage widget (shown on game card click)
+        self.game_home = GameHomePage()
+        self.game_home.back_clicked.connect(self._on_homepage_back)
+        self.game_home.play_clicked.connect(self._on_game_play)
+        self.game_home.rating_changed.connect(self._on_rating_changed)
+        self.game_home.open_source_clicked.connect(self._open_source_for_game)
+        self.game_home.download_requested.connect(self._on_homepage_download)
+
         self._apply_saved_widget_prefs()
 
         content_layout.addWidget(self.grid, 1)
         content_layout.addWidget(self.health, 1)
         content_layout.addWidget(self.updates, 1)
+        content_layout.addWidget(self.game_home, 1)
         self.health.hide()
         self.updates.hide()
+        self.game_home.hide()
 
         self._rebuild_sidebar()
 
