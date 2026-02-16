@@ -1,13 +1,15 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
+from queue import Queue, Empty
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QThread, QObject, Signal
 from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import QFileInfo
 from functools import lru_cache
 import time
+import threading
 from app.logging_utils import get_logger, kv, RateLimiter
 
 _icon_provider = QFileIconProvider()
@@ -18,14 +20,21 @@ _rate = RateLimiter()
 # while using 1/4 the memory of 1024. Qt SmoothTransformation keeps quality.
 _BASE_ICON_SIZE = 512
 
+# ---------------------------------------------------------------------------
+#  Async pixmap cache – populated by the background icon loader.
+#  Keyed by (path, size); values are QPixmap (may be null for failed loads).
+#  This dict is checked FIRST by pixmap_for_path / pixmap_for_game so icons
+#  that were loaded asynchronously are available on subsequent sync lookups.
+# ---------------------------------------------------------------------------
+_async_pixmap_cache: dict[tuple[str, int], QPixmap] = {}
+_async_raw_cache: dict[str, QPixmap] = {}  # path -> base-size pixmap
+
+
 @lru_cache(maxsize=2048)
 def _icon_for_path_cached(path: str) -> QIcon:
     start = time.perf_counter()
     if not path:
         return QIcon()
-    # Skip the redundant Path.exists() check — callers already filter via
-    # best_icon_path / _first_existing.  The QFileIconProvider will return a
-    # generic icon for missing files which we already handle as a null pixmap.
     ico = _icon_provider.icon(QFileInfo(path))
     if _rate.allow("icon_base_miss", 800):
         _log.debug("icon_base_miss %s", kv(path=path, duration_ms=round((time.perf_counter() - start) * 1000, 1)))
@@ -45,6 +54,9 @@ def icon_for_path(path: str) -> QIcon:
 @lru_cache(maxsize=2048)
 def _raw_pixmap_cached(path: str) -> QPixmap:
     """Highest-quality pixmap we can get for a path."""
+    # Check async cache first
+    if path in _async_raw_cache:
+        return _async_raw_cache[path]
     ico = icon_for_path(path)
     pm = ico.pixmap(QSize(_BASE_ICON_SIZE, _BASE_ICON_SIZE))
     return pm
@@ -61,6 +73,12 @@ def _scaled_pixmap_cached(path: str, size: int) -> QPixmap:
 
 
 def pixmap_for_path(path: str, size: int = 32) -> QPixmap:
+    # Fast path: check async cache first (populated by background loader)
+    key = (path, size)
+    cached = _async_pixmap_cache.get(key)
+    if cached is not None:
+        return cached
+
     before = _scaled_pixmap_cached.cache_info()
     pm = _scaled_pixmap_cached(path, size)
     if _rate.allow(f"pixmap_cache:{path}:{size}", interval_ms=1200):
@@ -129,3 +147,158 @@ def clear_icon_caches() -> None:
     _scaled_pixmap_cached.cache_clear()
     _path_exists_cached.cache_clear()
     _best_icon_path_cached.cache_clear()
+    _async_pixmap_cache.clear()
+    _async_raw_cache.clear()
+
+
+# ====================================================================== #
+#  Async icon loading – moves QFileIconProvider off the main thread
+# ====================================================================== #
+
+class _IconLoaderSignals(QObject):
+    """Signals emitted by the background icon loader on the main thread."""
+    icon_ready = Signal(str, int, object)  # (path, size, QPixmap or None)
+
+
+class IconLoaderThread(QThread):
+    """Background thread that loads icons via QFileIconProvider.
+
+    On Windows/macOS Qt 6, QPixmap is backed by QImage and is safe to
+    create from non-GUI threads.  This thread processes a queue of
+    (path, size) requests and emits ``icon_ready`` on the main thread
+    when each icon is done.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.signals = _IconLoaderSignals()
+        self._queue: Queue[tuple[str, int] | None] = Queue()
+        self._stop = False
+        # Track paths already queued to avoid redundant work
+        self._pending: set[str] = set()
+        self._lock = threading.Lock()
+
+    def request(self, path: str, size: int) -> bool:
+        """Enqueue an icon load request.  Returns False if already pending."""
+        with self._lock:
+            if path in self._pending:
+                return False
+            self._pending.add(path)
+        self._queue.put((path, size))
+        return True
+
+    def stop(self) -> None:
+        self._stop = True
+        self._queue.put(None)
+        self.wait(3000)
+
+    def run(self) -> None:
+        # Each thread gets its own QFileIconProvider instance
+        provider = QFileIconProvider()
+        while not self._stop:
+            try:
+                item = self._queue.get(timeout=0.5)
+            except Empty:
+                continue
+            if item is None:
+                break
+            path, size = item
+            start = time.perf_counter()
+            try:
+                ico = provider.icon(QFileInfo(path))
+                base_pm = ico.pixmap(QSize(_BASE_ICON_SIZE, _BASE_ICON_SIZE))
+                if base_pm.isNull():
+                    self.signals.icon_ready.emit(path, size, None)
+                else:
+                    # Scale to requested size
+                    if max(base_pm.width(), base_pm.height()) > size:
+                        pm = base_pm.scaled(
+                            QSize(size, size), Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation,
+                        )
+                    else:
+                        pm = base_pm
+                    # Store the base pixmap for cache population on main thread
+                    _async_raw_cache[path] = base_pm
+                    self.signals.icon_ready.emit(path, size, pm)
+                duration = (time.perf_counter() - start) * 1000
+                if _rate.allow("async_icon_load", 400):
+                    _log.debug(
+                        "async_icon_loaded %s",
+                        kv(path=path, duration_ms=round(duration, 1),
+                           null=base_pm.isNull()),
+                    )
+            except Exception:
+                _log.exception("async_icon_error %s", kv(path=path))
+                self.signals.icon_ready.emit(path, size, None)
+            finally:
+                with self._lock:
+                    self._pending.discard(path)
+
+
+# Singleton loader + subscriber registry
+_icon_loader: IconLoaderThread | None = None
+# path -> list of callbacks;  callback signature: (path, QPixmap | None) -> None
+_icon_subscribers: dict[str, list[Callable]] = {}
+
+
+def _get_icon_loader() -> IconLoaderThread:
+    global _icon_loader
+    if _icon_loader is None:
+        _icon_loader = IconLoaderThread()
+        _icon_loader.signals.icon_ready.connect(_on_icon_ready)
+        _icon_loader.start()
+    return _icon_loader
+
+
+def _on_icon_ready(path: str, size: int, pm: object) -> None:
+    """Slot called on the main thread when a background icon load completes."""
+    pixmap = pm if isinstance(pm, QPixmap) and not pm.isNull() else None
+    if pixmap is not None:
+        _async_pixmap_cache[(path, size)] = pixmap
+        # Also populate the async raw cache so sync lookups work on re-render
+        if path not in _async_raw_cache:
+            _async_raw_cache[path] = pixmap
+    callbacks = _icon_subscribers.pop(path, [])
+    for cb in callbacks:
+        try:
+            cb(path, pixmap)
+        except Exception:
+            _log.exception("icon_callback_error %s", kv(path=path))
+
+
+def request_icon_async(
+    path: str, size: int, callback: Callable[[str, Optional[QPixmap]], None],
+) -> None:
+    """Request an icon to be loaded in the background.
+
+    If the icon is already cached, *callback* is invoked synchronously.
+    Otherwise the request is queued and *callback* is called on the main
+    thread when the icon is ready.
+
+    Args:
+        path: File path to extract the icon from.
+        size: Desired pixmap size (square).
+        callback: ``callback(path, pixmap_or_none)`` – called on the main
+            thread when the icon is available.
+    """
+    if not path:
+        callback(path, None)
+        return
+    # Check async cache first
+    cached = _async_pixmap_cache.get((path, size))
+    if cached is not None:
+        callback(path, cached)
+        return
+    # Register callback and submit to background thread
+    _icon_subscribers.setdefault(path, []).append(callback)
+    loader = _get_icon_loader()
+    loader.request(path, size)
+
+
+def shutdown_icon_loader() -> None:
+    """Stop the background icon loader thread (call on app exit)."""
+    global _icon_loader
+    if _icon_loader is not None:
+        _icon_loader.stop()
+        _icon_loader = None
