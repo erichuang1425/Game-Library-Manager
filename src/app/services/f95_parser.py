@@ -3,8 +3,10 @@ import re
 from hashlib import md5
 from typing import Optional, Tuple
 from lxml import html
+from lxml.etree import XPathError, XPathEvalError
 from app.logging_utils import get_logger
 from app.services.version_parser import parse_version
+from app.exceptions import ParseError
 
 _log = get_logger("f95_parser")
 
@@ -31,7 +33,8 @@ def extract_f95_version(html_text: str) -> Tuple[Optional[str], str]:
     for xp in XPATHS:
         try:
             texts = doc.xpath(xp)
-        except Exception:
+        except (XPathError, XPathEvalError, AttributeError):
+            # Skip invalid XPath expressions or malformed HTML
             continue
         for t in texts:
             if not isinstance(t, str):
@@ -46,7 +49,8 @@ def extract_f95_version(html_text: str) -> Tuple[Optional[str], str]:
     # pass 2: scan first post lines
     try:
         body_texts = doc.xpath("//article[contains(@class,'message')][1]//text()")
-    except Exception:
+    except (XPathError, XPathEvalError, AttributeError):
+        # Handle XPath errors or malformed HTML gracefully
         body_texts = []
     for t in body_texts:
         if not isinstance(t, str):

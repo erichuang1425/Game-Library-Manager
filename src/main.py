@@ -30,6 +30,9 @@ def main() -> None:
     except Exception:
         log.exception("app.exec_failure")
         raise
+    finally:
+        from app.services.icon_service import shutdown_icon_loader
+        shutdown_icon_loader()
 
 if __name__ == "__main__":
     main()
