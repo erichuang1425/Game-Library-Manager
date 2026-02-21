@@ -11,46 +11,25 @@ from PySide6.QtWidgets import (
 )
 
 from app.models import Game
-from functools import lru_cache
-
+from app.services.title_matcher import calculate_similarity, normalize_title
 from app.logging_utils import get_logger
 
 _log = get_logger("bulk_source")
 
 
-@lru_cache(maxsize=4096)
-def _normalize_title(txt: str) -> str:
-    txt = txt.lower()
-    txt = re.sub(r"https?://", "", txt)
-    txt = re.sub(r"[/#?].*", "", txt)
-    txt = re.sub(r"[._-]+", " ", txt)
-    txt = re.sub(r"\b(v|build|season)\s*\d+[.\d]*", "", txt)
-    txt = re.sub(r"\b(alpha|beta|demo|redux|patreon)\b", "", txt)
-    txt = re.sub(r"\d+", "", txt)
-    txt = re.sub(r"\s+", " ", txt).strip()
-    return txt
-
-
-@lru_cache(maxsize=4096)
-def _tokens(name: str) -> set:
-    return {t for t in _normalize_title(name).split(" ") if t}
-
-
+# Use shared title_matcher module for fuzzy matching
 def _score(a: str, b: str) -> float:
-    ta, tb = _tokens(a), _tokens(b)
-    if not ta or not tb:
-        return 0.0
-    inter = len(ta & tb)
-    union = len(ta | tb)
-    return inter / union
+    """Calculate similarity between two titles using shared utility."""
+    return calculate_similarity(a, b)
 
 
 def _derive_title_from_url(url: str) -> str:
+    """Extract and normalize title from URL slug."""
     m = re.search(r"/threads/([^/]+)/", url)
     if not m:
         return ""
     slug = m.group(1)
-    return _normalize_title(slug)
+    return normalize_title(slug)
 
 
 class BulkSourceImportDialog(QDialog):

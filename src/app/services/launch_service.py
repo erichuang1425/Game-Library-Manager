@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.models import Game
+from app.exceptions import LaunchError
 
 def launch_game(game: Game) -> tuple[bool, str]:
     """
@@ -37,5 +38,6 @@ def launch_game(game: Game) -> tuple[bool, str]:
             return True, "Launched via backup target"
 
         return False, "Shortcut missing and no valid backup target"
-    except Exception as e:
+    except (OSError, FileNotFoundError, PermissionError, subprocess.SubprocessError) as e:
+        # Handle launch failures: missing files, permission denied, subprocess errors
         return False, str(e)

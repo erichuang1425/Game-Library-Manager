@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
+from app.models.enums import GameStatus, Confidence
+
 
 @dataclass
 class Game:
@@ -19,7 +21,7 @@ class Game:
     backup_working_dir: str = ""         # resolved working directory from .lnk
 
     # Library metadata
-    status: str = "backlog"              # backlog | playing | finished | dropped
+    status: str = GameStatus.BACKLOG
     rating: Optional[int] = None         # 1..10
     tags: List[str] = field(default_factory=list)
     last_played: Optional[datetime] = None
@@ -27,7 +29,7 @@ class Game:
     notes: str = ""
 
     # Quality flags
-    confidence: str = "medium"           # high | medium | low
+    confidence: str = Confidence.MEDIUM
 
     # Source / update tracking
     source_url: str = ""                 # source page (e.g., f95zone thread)
@@ -44,3 +46,24 @@ class Game:
 
     # Icon quality tracking
     icon_upscaled: bool = False          # True once a high-quality icon has been cached
+    dominant_color_hex: str = ""         # cached hex color from icon, e.g. "#3a7bd5"
+
+    # F95zone integration (Phase 6-10)
+    f95_thread_id: Optional[int] = None  # F95zone thread ID
+    f95_category: str = ""               # Completed, Ongoing, Abandoned, On Hold
+    f95_tags: List[str] = field(default_factory=list)  # Tags from F95zone thread
+    developer: str = ""                  # Developer/creator name
+
+    # Download tracking
+    download_url: str = ""               # Last download URL used
+    download_host: str = ""              # Host type (mega, gdrive, etc.)
+    last_download_at: Optional[datetime] = None  # Last download timestamp
+
+    # Installation paths
+    install_path: str = ""               # Root installation folder
+    executable_path: str = ""            # Path to main game executable
+    save_folder_path: str = ""           # Path to save game folder
+
+    # Backup/versioning
+    has_backup: bool = False             # Whether a backup exists
+    backup_path: str = ""                # Path to version backup folder
