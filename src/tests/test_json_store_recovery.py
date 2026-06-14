@@ -5,14 +5,17 @@ These cover the hardening called out in PR #31 review:
   - P1: recovery must select the *newest valid* persisted copy rather than using
         an unconditional primary -> fallback precedence.
   - P2: recovery must also consider fallback backup generations.
-Plus the atomic-write backup chain and the last_download_at datetime round-trip.
+Plus schema validation of recovery candidates, the atomic-write backup chain,
+and the datetime round-trip (including last_download_at).
 """
 import json
 import os
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
-from app.models import Game
+from app.models import Collection, Game
 from app.exceptions import StorageError
 from app.storage import json_store
 from app.storage.json_store import (
@@ -23,8 +26,11 @@ from app.storage.json_store import (
     BACKUP_GENERATIONS,
     save_library,
     load_library,
+    save_settings,
+    load_settings,
+    save_library_bundle,
+    load_library_bundle,
 )
-from datetime import datetime
 
 
 @pytest.fixture
@@ -122,6 +128,27 @@ def test_write_falls_back_when_primary_unwritable(tmp_path, isolated_fallback):
     assert _read_with_recovery(primary)["marker"] == "v"
 
 
+def test_write_raises_when_primary_and_fallback_fail(tmp_path, isolated_fallback):
+    """If both primary and fallback writes fail, surface a StorageError."""
+    primary = tmp_path / "library.json"
+    with patch.object(json_store, "_atomic_write_json", side_effect=OSError("nope")):
+        with pytest.raises(StorageError):
+            json_store._write_with_fallback(primary, {"version": 1})
+
+
+def test_atomic_write_preserves_live_file_when_replace_fails(tmp_path, isolated_fallback):
+    """A failed os.replace must leave the live file intact and leave no temp file."""
+    path = tmp_path / "settings.json"
+    path.write_text('{"theme": "dark"}', encoding="utf-8")
+
+    with patch("app.storage.json_store.os.replace", side_effect=OSError("injected")):
+        with pytest.raises(OSError, match="injected"):
+            _atomic_write_json(path, {"theme": "light"})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"theme": "dark"}
+    assert list(tmp_path.glob("settings.json.*.tmp")) == []
+
+
 def test_backup_rotation_does_not_promote_corrupt(tmp_path, isolated_fallback):
     primary = tmp_path / "library.json"
     _atomic_write_json(primary, {"version": 1, "marker": "good"})
@@ -134,6 +161,18 @@ def test_backup_rotation_does_not_promote_corrupt(tmp_path, isolated_fallback):
     bak1 = _backup_path(primary, 1)
     if bak1.exists():
         assert json.loads(bak1.read_text(encoding="utf-8"))["marker"] != "{corrupt"
+
+
+def test_successive_saves_rotate_known_good_backups(tmp_path, isolated_fallback):
+    """Each save promotes the previous live file into the backup chain."""
+    path = tmp_path / "settings.json"
+    for revision in range(1, 5):
+        save_settings(path, {"revision": revision})
+
+    assert load_settings(path) == {"revision": 4}
+    assert json.loads(_backup_path(path, 1).read_text()) == {"revision": 3}
+    assert json.loads(_backup_path(path, 2).read_text()) == {"revision": 2}
+    assert json.loads(_backup_path(path, 3).read_text()) == {"revision": 1}
 
 
 def test_backup_chain_capped_at_generations(tmp_path, isolated_fallback):
@@ -213,3 +252,25 @@ def test_last_download_at_round_trip(tmp_path, isolated_fallback):
 
     games = load_library(primary)
     assert games[0].last_download_at == dt
+
+
+def test_library_bundle_round_trips_every_datetime(tmp_path, isolated_fallback):
+    """Every datetime field round-trips through the bundle, alongside collections."""
+    path = tmp_path / "library.json"
+    timestamp = datetime(2026, 6, 14, 12, 30, tzinfo=timezone.utc)
+    game = Game(
+        game_id="game-1",
+        title="Example",
+        last_played=timestamp,
+        source_checked_at=timestamp,
+        last_download_at=timestamp,
+    )
+    collection = Collection(collection_id="favorites", name="Favorites", game_ids=["game-1"])
+
+    save_library_bundle(path, [game], [collection])
+    games, collections = load_library_bundle(path)
+
+    assert games[0].last_played == timestamp
+    assert games[0].source_checked_at == timestamp
+    assert games[0].last_download_at == timestamp
+    assert collections == [collection]

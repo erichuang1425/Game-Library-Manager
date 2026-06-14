@@ -86,11 +86,12 @@ def _str_to_dt(s: Optional[str]) -> Optional[datetime]:
 # Atomic write + recovery primitives
 # ---------------------------------------------------------------------------
 
-def _backup_path(path: Path, generation: int) -> Path:
+def _backup_path(path: Path, generation: int = 1) -> Path:
     return path.with_name(f"{path.name}.bak.{generation}")
 
 
 def _fallback_path(path: Path) -> Path:
+    """Return the deterministic emergency-storage path for *path*."""
     return temp_data_dir() / path.name
 
 
@@ -159,7 +160,7 @@ def _rotate_backup(path: Path) -> None:
         pass
 
 
-def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
+def _atomic_write_json(path: Path, data: Any) -> None:
     """
     Write JSON atomically: serialize to a fsynced temp file in the destination
     directory, then atomically replace the target via os.replace.
@@ -192,19 +193,25 @@ def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
         raise
 
 
-def _write_with_fallback(path: Path, data: Dict[str, Any]) -> Path:
+def _write_with_fallback(path: Path, data: Any) -> Path:
     """
     Atomically write to the primary path; on failure fall back to a temp
     directory copy (also written atomically, with its own backup chain).
     Returns the path actually written so callers can report the active location.
+    Raises StorageError if both the primary and fallback writes fail.
     """
     try:
         _atomic_write_json(path, data)
         return path
-    except (OSError, IOError) as e:
+    except OSError as error:
         fb_path = _fallback_path(path)
-        _atomic_write_json(fb_path, data)
-        _log.error("write_fallback %s", kv(path=path, fallback=str(fb_path), err=e))
+        try:
+            _atomic_write_json(fb_path, data)
+        except OSError as fb_error:
+            raise StorageError(
+                f"Unable to save data to {path} or fallback {fb_path}"
+            ) from fb_error
+        _log.error("write_fallback %s", kv(path=path, fallback=str(fb_path), err=error))
         _warn_fallback(fb_path)
         return fb_path
 
@@ -291,17 +298,18 @@ def _deserialize_game(obj: Dict[str, Any]) -> Game:
     - Ignores unknown fields from older versions
     - Migrates old key names when possible
     """
+    data = dict(obj)
     allowed = set(Game.__dataclass_fields__.keys())
 
     for field in _GAME_DT_FIELDS:
-        if field in obj:
-            obj[field] = _str_to_dt(obj.get(field))
+        if field in data:
+            data[field] = _str_to_dt(data.get(field))
 
     # If old model used selected_launcher_path, treat it as backup target
-    if "selected_launcher_path" in obj and "backup_target_path" not in obj:
-        obj["backup_target_path"] = obj.get("selected_launcher_path", "")
+    if "selected_launcher_path" in data and "backup_target_path" not in data:
+        data["backup_target_path"] = data.get("selected_launcher_path", "")
 
-    cleaned = {k: v for k, v in obj.items() if k in allowed}
+    cleaned = {k: v for k, v in data.items() if k in allowed}
 
     # Ensure required fields exist
     cleaned.setdefault("game_id", "")
@@ -323,7 +331,7 @@ def save_library(path: Path, games: List[Game]) -> None:
         "games": [_serialize_game(g) for g in games],
     }
     written = _write_with_fallback(path, data)
-    _log.info("save_library_done %s", kv(path=path, count=len(games),
+    _log.info("save_library_done %s", kv(path=written, count=len(games),
                                          bytes=written.stat().st_size if written.exists() else 0,
                                          duration_ms=round((time.perf_counter() - start) * 1000, 1),
                                          fallback_used=written != path))
@@ -344,7 +352,7 @@ def load_library(path: Path) -> List[Game]:
 def save_settings(path: Path, settings: Dict[str, Any]) -> None:
     start = time.perf_counter()
     written = _write_with_fallback(path, settings)
-    _log.info("save_settings_done %s", kv(path=path, keys=len(settings),
+    _log.info("save_settings_done %s", kv(path=written, keys=len(settings),
                                           duration_ms=round((time.perf_counter() - start) * 1000, 1),
                                           fallback_used=written != path))
 
@@ -379,7 +387,7 @@ def save_library_bundle(path: Path, games: List[Game], collections: List[Collect
         "collections": [asdict(c) for c in collections],
     }
     written = _write_with_fallback(path, data)
-    _log.info("save_library_bundle_done %s", kv(path=path, games=len(games), collections=len(collections),
+    _log.info("save_library_bundle_done %s", kv(path=written, games=len(games), collections=len(collections),
                                                 bytes=written.stat().st_size if written.exists() else 0,
                                                 duration_ms=round((time.perf_counter() - start) * 1000, 1),
                                                 fallback_used=written != path))
