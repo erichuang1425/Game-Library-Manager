@@ -118,8 +118,11 @@ def _is_library_payload(data: Dict[str, Any]) -> bool:
     if not all(isinstance(g, dict) for g in games):
         return False
     collections = data.get("collections")
-    if collections is not None and not isinstance(collections, list):
-        return False
+    if collections is not None:
+        if not isinstance(collections, list):
+            return False
+        if not all(isinstance(c, dict) for c in collections):
+            return False
     return True
 
 
