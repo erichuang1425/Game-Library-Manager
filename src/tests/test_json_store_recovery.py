@@ -19,6 +19,7 @@ from app.storage.json_store import (
     _atomic_write_json,
     _read_with_recovery,
     _backup_path,
+    _is_library_payload,
     BACKUP_GENERATIONS,
     save_library,
     load_library,
@@ -141,6 +142,60 @@ def test_backup_chain_capped_at_generations(tmp_path, isolated_fallback):
         _atomic_write_json(primary, {"version": 1, "n": i})
     # Never more than BACKUP_GENERATIONS backups exist.
     assert not _backup_path(primary, BACKUP_GENERATIONS + 1).exists()
+
+
+def test_wrong_shape_candidate_does_not_outrank_good_backup(tmp_path, isolated_fallback):
+    """P1: a newer but wrong-shaped library file must not hide a recoverable backup."""
+    primary = tmp_path / "library.json"
+
+    _atomic_write_json(primary, {"version": 1, "games": [{"game_id": "keep"}]})
+    _atomic_write_json(primary, {"version": 1, "games": [{"game_id": "keep2"}]})
+    assert _backup_path(primary, 1).exists()  # bak.1 holds the first good copy
+
+    # Overwrite the live file with valid JSON of the wrong shape, made newest.
+    primary.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    _set_mtime(primary, 9_000_000)
+
+    data = _read_with_recovery(primary, validate=_is_library_payload)
+    assert isinstance(data.get("games"), list)
+    assert data["games"][0]["game_id"] in {"keep", "keep2"}
+
+
+def test_wrong_shape_only_candidate_raises(tmp_path, isolated_fallback):
+    """P1: if every candidate is parseable but wrong-shaped, surface a StorageError."""
+    primary = tmp_path / "library.json"
+    primary.write_text(json.dumps({"not": "a library"}), encoding="utf-8")
+    with pytest.raises(StorageError):
+        _read_with_recovery(primary, validate=_is_library_payload)
+
+
+def test_empty_library_is_valid_payload():
+    assert _is_library_payload({"version": 1, "games": []})
+    assert not _is_library_payload({})
+    assert not _is_library_payload({"games": "nope"})
+    assert not _is_library_payload({"games": [1, 2]})
+    assert not _is_library_payload({"games": [], "collections": {}})
+
+
+def test_failed_serialization_does_not_rotate_backups(tmp_path, isolated_fallback):
+    """P2: a save that fails before replace must not advance the backup chain."""
+    primary = tmp_path / "library.json"
+    _atomic_write_json(primary, {"version": 1, "games": [{"game_id": "v0"}]})
+    _atomic_write_json(primary, {"version": 1, "games": [{"game_id": "v1"}]})
+
+    bak1 = _backup_path(primary, 1)
+    before = bak1.read_text(encoding="utf-8")
+    assert not _backup_path(primary, 2).exists()
+
+    # Unserializable payload -> json.dumps raises before any rotation/replace.
+    with pytest.raises(TypeError):
+        _atomic_write_json(primary, {"bad": {object()}})
+
+    # Backup chain unchanged; no generation evicted.
+    assert bak1.read_text(encoding="utf-8") == before
+    assert not _backup_path(primary, 2).exists()
+    # Live file still the last good write.
+    assert json.loads(primary.read_text(encoding="utf-8"))["games"][0]["game_id"] == "v1"
 
 
 def test_last_download_at_round_trip(tmp_path, isolated_fallback):

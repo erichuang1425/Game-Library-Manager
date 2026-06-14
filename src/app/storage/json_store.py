@@ -7,7 +7,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.models import Game, Collection
 from app.logging_utils import get_logger, kv
@@ -105,6 +105,24 @@ def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
     return raw
 
 
+def _is_library_payload(data: Dict[str, Any]) -> bool:
+    """
+    A recoverable library/bundle payload must carry a `games` list of objects.
+    This rejects parseable-but-wrong-shaped data (e.g. `{}` or an accidentally
+    copied settings object) so it cannot outrank a known-good backup and hide
+    recoverable user data behind an empty library.
+    """
+    games = data.get("games")
+    if not isinstance(games, list):
+        return False
+    if not all(isinstance(g, dict) for g in games):
+        return False
+    collections = data.get("collections")
+    if collections is not None and not isinstance(collections, list):
+        return False
+    return True
+
+
 def _rotate_backup(path: Path) -> None:
     """
     Promote the current live file into the rotating backup chain.
@@ -141,12 +159,17 @@ def _rotate_backup(path: Path) -> None:
 def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
     """
     Write JSON atomically: serialize to a fsynced temp file in the destination
-    directory, then atomically replace the target via os.replace. Rotates a
-    known-good backup of the previous contents first.
+    directory, then atomically replace the target via os.replace.
+
+    Serialization and the fsynced temp file are fully prepared *before* the
+    backup chain is rotated, so a failed save (unserializable value, disk
+    exhaustion, temp-file failure) cannot advance the generations and evict
+    known-good snapshots while the live file was never replaced. Rotation
+    happens immediately before the atomic replace.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    _rotate_backup(path)
 
+    # Prepare the replacement first; any failure here leaves backups untouched.
     text = json.dumps(data, ensure_ascii=False, indent=2)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f"{path.name}.", suffix=".tmp")
     tmp_path = Path(tmp_name)
@@ -155,6 +178,8 @@ def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
+        # Replacement is durable on disk; now rotate and swap.
+        _rotate_backup(path)
         os.replace(tmp_path, path)
     except BaseException:
         try:
@@ -195,7 +220,10 @@ def _candidate_paths(path: Path) -> List[Path]:
     return candidates
 
 
-def _read_with_recovery(path: Path) -> Optional[Dict[str, Any]]:
+def _read_with_recovery(
+    path: Path,
+    validate: Optional[Callable[[Dict[str, Any]], bool]] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Return the newest valid persisted copy among all candidates.
 
@@ -204,6 +232,10 @@ def _read_with_recovery(path: Path) -> Optional[Dict[str, Any]]:
     primary failure is not silently discarded, and a stale fallback never
     outranks a newer primary or backup. Fallback backup generations are included
     so recovery succeeds even if the active fallback later becomes corrupt.
+
+    A candidate is only eligible if it parses as a JSON object AND satisfies the
+    optional `validate` schema predicate, so parseable-but-wrong-shaped data
+    cannot outrank a known-good backup.
 
     Returns:
       - dict: contents of the newest valid copy
@@ -219,7 +251,7 @@ def _read_with_recovery(path: Path) -> Optional[Dict[str, Any]]:
             continue
         any_existed = True
         data = _read_json_file(cand)
-        if data is None:
+        if data is None or (validate is not None and not validate(data)):
             _log.warning("recovery_skip_invalid %s", kv(path=cand))
             continue
         try:
@@ -296,7 +328,7 @@ def save_library(path: Path, games: List[Game]) -> None:
 
 def load_library(path: Path) -> List[Game]:
     start = time.perf_counter()
-    raw = _read_with_recovery(path)
+    raw = _read_with_recovery(path, validate=_is_library_payload)
     if raw is None:
         _log.warning("load_library_missing %s", kv(path=path))
         return []
@@ -356,7 +388,7 @@ def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
     - v1 had only games
     - v2 has games + collections
     """
-    raw = _read_with_recovery(path)
+    raw = _read_with_recovery(path, validate=_is_library_payload)
     if raw is None:
         return [], []
 
