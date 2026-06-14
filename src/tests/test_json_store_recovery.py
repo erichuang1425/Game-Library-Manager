@@ -217,6 +217,13 @@ def test_empty_library_is_valid_payload():
     assert not _is_library_payload({"games": [], "collections": [None]})
     assert not _is_library_payload({"games": [], "collections": [1]})
     assert _is_library_payload({"games": [], "collections": [{"collection_id": "c"}]})
+    # game_id, when present, must be a string (used as a dict key downstream).
+    assert not _is_library_payload({"games": [{"game_id": []}]})
+    assert not _is_library_payload({"games": [{"game_id": 5}]})
+    assert _is_library_payload({"games": [{"game_id": "ok"}]})
+    assert _is_library_payload({"games": [{"title": "no id"}]})  # absent id defaults later
+    # collection_id, when present, must be a string too.
+    assert not _is_library_payload({"games": [], "collections": [{"collection_id": []}]})
 
 
 def test_failed_serialization_does_not_rotate_backups(tmp_path, isolated_fallback):

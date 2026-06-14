@@ -108,22 +108,30 @@ def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
 
 def _is_library_payload(data: Dict[str, Any]) -> bool:
     """
-    A recoverable library/bundle payload must carry a `games` list of objects.
-    This rejects parseable-but-wrong-shaped data (e.g. `{}` or an accidentally
-    copied settings object) so it cannot outrank a known-good backup and hide
-    recoverable user data behind an empty library.
+    A recoverable library/bundle payload must carry a `games` list of objects,
+    each with a usable `game_id`. This rejects parseable-but-wrong-shaped data
+    (e.g. `{}`, a copied settings object, or `{"games": [{"game_id": []}]}`) so
+    it cannot outrank a known-good backup and either hide recoverable user data
+    behind an empty library or crash a downstream consumer that keys games by id.
     """
     games = data.get("games")
     if not isinstance(games, list):
         return False
-    if not all(isinstance(g, dict) for g in games):
-        return False
+    for g in games:
+        if not isinstance(g, dict):
+            return False
+        # game_id is used as a dict key downstream; if present it must be a str.
+        if "game_id" in g and not isinstance(g["game_id"], str):
+            return False
     collections = data.get("collections")
     if collections is not None:
         if not isinstance(collections, list):
             return False
-        if not all(isinstance(c, dict) for c in collections):
-            return False
+        for c in collections:
+            if not isinstance(c, dict):
+                return False
+            if "collection_id" in c and not isinstance(c["collection_id"], str):
+                return False
     return True
 
 
