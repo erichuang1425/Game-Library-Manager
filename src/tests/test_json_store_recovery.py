@@ -175,6 +175,9 @@ def test_empty_library_is_valid_payload():
     assert not _is_library_payload({"games": "nope"})
     assert not _is_library_payload({"games": [1, 2]})
     assert not _is_library_payload({"games": [], "collections": {}})
+    assert not _is_library_payload({"games": [], "collections": [None]})
+    assert not _is_library_payload({"games": [], "collections": [1]})
+    assert _is_library_payload({"games": [], "collections": [{"collection_id": "c"}]})
 
 
 def test_failed_serialization_does_not_rotate_backups(tmp_path, isolated_fallback):
