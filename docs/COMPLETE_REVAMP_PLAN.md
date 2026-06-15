@@ -267,6 +267,7 @@ Do not introduce an ORM initially. Use a small explicit data mapper and SQL migr
 - `collections` and `collection_members`
 - `saved_views`
 - `jobs` and optional `job_events`
+- `activity_log` — durable application-activity/audit records for the Activity view (launches, edits, imports, checks, failures, recoverable actions), independent of `jobs`/`job_events`
 - `health_findings`
 - `app_settings`
 - `provider_cache` with expiry and provenance
@@ -280,7 +281,7 @@ Do not introduce an ORM initially. Use a small explicit data mapper and SQL migr
 5. Run integrity checks: row counts, required identities, collection references, datetime/path normalization, and duplicate detection.
 6. Atomically promote the temporary database.
 7. Record import metadata and the original backup location.
-8. Keep JSON read-only for at least one release and provide “Export legacy-compatible JSON.”
+8. While rollback to the pre-revamp release is still supported, keep the legacy JSON synchronized with post-migration edits so a downgrade cannot silently discard newer data. Do this with **compatibility dual-writing** (every committed change is written to both SQLite and a legacy-compatible `library.json`) or, at minimum, an **automatic legacy-JSON export on each save**. A manual “Export legacy-compatible JSON” action is offered in addition, but is not sufficient on its own to make rollback safe. Treat the legacy JSON as read-only only after the rollback window closes (no supported downgrade path remains).
 9. If any step fails, leave the old app data untouched and show a recovery report.
 
 ### 6.4 Immediate safety improvements before SQLite
@@ -307,7 +308,7 @@ Use six durable destinations:
 2. **Updates** — review source checks, compare versions, and start update workflows.
 3. **Health** — diagnose missing or inconsistent resources and run repairs.
 4. **Downloads** — see active and historical acquisition/install jobs.
-5. **Activity** — recent imports, launches, edits, checks, failures, and recoverable actions.
+5. **Activity** — recent imports, launches, edits, checks, failures, and recoverable actions, reconstructed after restart from the durable `activity_log` table (not only from in-memory job events).
 6. **Settings** — library locations, appearance, network/providers, storage, shortcuts, diagnostics.
 
 Collections and saved views belong within Library navigation rather than acting as separate top-level modes.
@@ -446,13 +447,26 @@ Create one injected HTTP client with:
 
 Provider interface:
 
+Every network-bound provider operation receives a `RequestContext` carrying the
+cancellation token (plus correlation id, deadline, and diagnostic level) so a
+provider blocked in an HTTP request can observe cancellation cooperatively and
+shut down cleanly — matching the cancellable-job and HTTP-client requirements.
+The context is threaded through to the injected HTTP client, which honors the
+same token, so cancellation propagates end to end rather than stopping at the
+job boundary.
+
 ```python
 class SourceProvider(Protocol):
     provider_id: str
     def canonicalize(self, reference: str) -> SourceIdentity: ...
-    def fetch_metadata(self, identity: SourceIdentity) -> SourceSnapshot: ...
-    def list_artifacts(self, snapshot: SourceSnapshot) -> list[Artifact]: ...
+    def fetch_metadata(self, identity: SourceIdentity, ctx: RequestContext) -> SourceSnapshot: ...
+    def list_artifacts(self, snapshot: SourceSnapshot, ctx: RequestContext) -> list[Artifact]: ...
 ```
+
+`RequestContext` exposes at least `cancel_token: CancellationToken`, `deadline`,
+`correlation_id`, and `diagnostics_level`; long-running provider work must poll
+`ctx.cancel_token` (or pass it to the HTTP client) and raise `OperationCancelled`
+promptly when cancellation is requested.
 
 F95 becomes one provider implementation, not a set of assumptions spread through general-purpose UI and services.
 
