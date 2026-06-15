@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,8 +26,10 @@ _LIBRARY_SCHEMA_VERSION = 2
 
 
 def _fallback_path(path: Path) -> Path:
-    """Return the deterministic emergency-storage path for *path*."""
-    return temp_data_dir() / path.name
+    """Return a collision-resistant emergency-storage path for *path*."""
+    primary = str(path.resolve(strict=False)).encode("utf-8")
+    namespace = sha256(primary).hexdigest()[:16]
+    return temp_data_dir() / namespace / path.name
 
 
 def _fallback_marker_path(path: Path) -> Path:
@@ -84,7 +87,15 @@ def _atomic_write_json(path: Path, data: Any) -> None:
 def _write_with_fallback(path: Path, data: Any) -> tuple[Path, bool]:
     try:
         _atomic_write_json(path, data)
-        _fallback_marker_path(path).unlink(missing_ok=True)
+        try:
+            _fallback_marker_path(path).unlink(missing_ok=True)
+        except OSError as marker_error:
+            # The primary is authoritative after a successful replace. A stale
+            # marker must not turn that successful save into a fallback write.
+            _log.warning(
+                "fallback_marker_cleanup_failed %s",
+                kv(path=_fallback_marker_path(path), err=marker_error),
+            )
         return path, False
     except OSError as error:
         fallback = _fallback_path(path)
