@@ -5,8 +5,8 @@ These cover the hardening called out in PR #31 review:
   - P1: recovery must select the *newest valid* persisted copy rather than using
         an unconditional primary -> fallback precedence.
   - P2: recovery must also consider fallback backup generations.
-Plus schema validation of recovery candidates, the atomic-write backup chain,
-and the datetime round-trip (including last_download_at).
+Plus schema validation/migration of recovery candidates, the atomic-write backup
+chain, and the datetime round-trip (including last_download_at).
 """
 import json
 import os
@@ -328,3 +328,64 @@ def test_library_bundle_round_trips_every_datetime(tmp_path, isolated_fallback):
     assert games[0].source_checked_at == timestamp
     assert games[0].last_download_at == timestamp
     assert collections == [collection]
+
+
+def test_legacy_save_library_writes_current_schema(tmp_path, isolated_fallback):
+    path = tmp_path / "library.json"
+
+    save_library(path, [Game(game_id="game-1", title="Example")])
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["version"] == 2
+    assert document["collections"] == []
+
+
+def test_v1_library_document_migrates_to_bundle_shape(tmp_path, isolated_fallback):
+    path = tmp_path / "library.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "games": [{"game_id": "legacy", "title": "Legacy Game"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    games, collections = load_library_bundle(path)
+
+    assert [game.game_id for game in games] == ["legacy"]
+    assert collections == []
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        # A non-object top-level document is unrecoverable: recovery rejects it.
+        ([], "unreadable or corrupt"),
+        # Schema-version problems on otherwise well-shaped payloads surface
+        # specific migration errors.
+        ({"version": "2", "games": []}, "schema version"),
+        ({"version": 99, "games": []}, "newer than supported"),
+        # Wrong-shaped `games` fails the recovery payload check, so the only
+        # copy is treated as unrecoverable.
+        ({"version": 2, "games": {}}, "unreadable or corrupt"),
+        ({"version": 2, "games": ["invalid"]}, "unreadable or corrupt"),
+    ],
+)
+def test_invalid_library_documents_are_rejected(
+    tmp_path, isolated_fallback, payload, message
+):
+    path = tmp_path / "library.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(StorageError, match=message):
+        load_library_bundle(path)
+
+
+def test_non_object_settings_document_is_rejected(tmp_path, isolated_fallback):
+    path = tmp_path / "settings.json"
+    path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(StorageError, match="unreadable or corrupt"):
+        load_settings(path)

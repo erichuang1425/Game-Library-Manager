@@ -4,10 +4,11 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.models import Game, Collection
 from app.logging_utils import get_logger, kv
@@ -23,6 +24,9 @@ BACKUP_GENERATIONS = 3
 
 # Datetime fields on Game that must be round-tripped consistently.
 _GAME_DT_FIELDS = ("last_played", "source_checked_at", "last_download_at")
+
+# Current on-disk library schema version. v1 was games-only; v2 adds collections.
+_LIBRARY_SCHEMA_VERSION = 2
 
 
 def _warn_fallback(fb_path: Path) -> None:
@@ -310,6 +314,58 @@ def _read_with_recovery(
 
 
 # ---------------------------------------------------------------------------
+# Library schema validation + migration
+# ---------------------------------------------------------------------------
+
+def _validate_library_document(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise StorageError("Library JSON must contain an object at the top level")
+    version = raw.get("version", 1)
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise StorageError(f"Invalid library schema version: {version!r}")
+    if version > _LIBRARY_SCHEMA_VERSION:
+        raise StorageError(
+            f"Library schema version {version} is newer than supported "
+            f"version {_LIBRARY_SCHEMA_VERSION}"
+        )
+    for key in ("games", "collections"):
+        if key in raw and not isinstance(raw[key], list):
+            raise StorageError(f"Library field {key!r} must contain a list")
+        if key in raw and any(not isinstance(item, dict) for item in raw[key]):
+            raise StorageError(f"Library field {key!r} must contain only objects")
+    return raw
+
+
+def _migrate_library_v1_to_v2(raw: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(raw)
+    migrated.setdefault("collections", [])
+    migrated["version"] = 2
+    return migrated
+
+
+_LIBRARY_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
+    1: _migrate_library_v1_to_v2,
+}
+
+
+def _migrate_library_document(raw: Any) -> Dict[str, Any]:
+    document = _validate_library_document(raw)
+    version = document.get("version", 1)
+    while version < _LIBRARY_SCHEMA_VERSION:
+        migration = _LIBRARY_MIGRATIONS.get(version)
+        if migration is None:
+            raise StorageError(f"No library migration registered for version {version}")
+        document = _validate_library_document(migration(document))
+        next_version = document.get("version")
+        if next_version != version + 1:
+            raise StorageError(
+                f"Library migration {version} produced invalid version {next_version!r}"
+            )
+        version = next_version
+    return document
+
+
+# ---------------------------------------------------------------------------
 # Game (de)serialization
 # ---------------------------------------------------------------------------
 
@@ -355,8 +411,9 @@ def _deserialize_game(obj: Dict[str, Any]) -> Game:
 def save_library(path: Path, games: List[Game]) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
-        "version": 1,
+        "version": _LIBRARY_SCHEMA_VERSION,
         "games": [_serialize_game(g) for g in games],
+        "collections": [],
     }
     written = _write_with_fallback(path, data)
     _log.info("save_library_done %s", kv(path=written, count=len(games),
@@ -371,7 +428,7 @@ def load_library(path: Path) -> List[Game]:
     if raw is None:
         _log.warning("load_library_missing %s", kv(path=path))
         return []
-
+    raw = _migrate_library_document(raw)
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
     _log.info("load_library_done %s", kv(path=path, count=len(games), duration_ms=round((time.perf_counter() - start) * 1000, 1)))
     return games
@@ -395,22 +452,10 @@ def load_settings(path: Path) -> Dict[str, Any]:
     return data
 
 
-def save_collections(path: Path, collections: List[Collection]) -> None:
-    """
-    Save both games + collections in the same file.
-    (We keep the old function names, but we’ll update save_library/load_library to include collections.)
-    """
-    raise NotImplementedError("Use save_library_bundle instead")
-
-
-def load_collections(path: Path) -> List[Collection]:
-    raise NotImplementedError("Use load_library_bundle instead")
-
-
 def save_library_bundle(path: Path, games: List[Game], collections: List[Collection]) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
-        "version": 2,
+        "version": _LIBRARY_SCHEMA_VERSION,
         "games": [_serialize_game(g) for g in games],
         "collections": [asdict(c) for c in collections],
     }
@@ -431,6 +476,7 @@ def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
     if raw is None:
         return [], []
 
+    raw = _migrate_library_document(raw)
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
 
     # ---- collections (v2 only; safe if missing) ----
