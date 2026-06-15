@@ -57,6 +57,28 @@ class MainWindow(
 ):
     """Main application window combining all functionality through mixins."""
 
+    # ------------------------------------------------------------------
+    # Library data access (single source of truth = JsonGameRepository)
+    #
+    # The game list, id index, and collection list are exposed as read-only
+    # properties backed directly by the repository. Reads always reflect the
+    # repository's live state, so the window can never hold a stale alias, and
+    # structural mutations must go through repository methods
+    # (add/upsert/remove/update_all/set_collections) rather than rebinding
+    # these attributes — assigning to them raises AttributeError by design.
+    # ------------------------------------------------------------------
+    @property
+    def _all_games(self) -> List[Game]:
+        return self._repo.get_all()
+
+    @property
+    def _games_by_id(self) -> Dict[str, Game]:
+        return self._repo.index
+
+    @property
+    def _collections(self) -> List[Collection]:
+        return self._repo.get_collections()
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Game Library Manager")
@@ -107,9 +129,6 @@ class MainWindow(
         # Load library via repository
         lib_start = time.perf_counter()
         self._repo = JsonGameRepository(library_json_path())
-        self._all_games = self._repo.get_all()
-        self._collections = self._repo.get_collections()
-        self._games_by_id: Dict[str, Game] = self._repo.index
         self._active_collection_id: Optional[str] = None
         self._log.info(
             "startup_library_loaded %s",
