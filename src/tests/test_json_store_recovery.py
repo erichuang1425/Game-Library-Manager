@@ -217,11 +217,14 @@ def test_empty_library_is_valid_payload():
     assert not _is_library_payload({"games": [], "collections": [None]})
     assert not _is_library_payload({"games": [], "collections": [1]})
     assert _is_library_payload({"games": [], "collections": [{"collection_id": "c"}]})
-    # game_id, when present, must be a string (used as a dict key downstream).
+    # Each game needs a non-empty, unique string game_id (it is a dict key downstream).
     assert not _is_library_payload({"games": [{"game_id": []}]})
     assert not _is_library_payload({"games": [{"game_id": 5}]})
+    assert not _is_library_payload({"games": [{"title": "no id"}]})  # missing id
+    assert not _is_library_payload({"games": [{"game_id": ""}]})  # empty id
+    assert not _is_library_payload({"games": [{"game_id": "x"}, {"game_id": "x"}]})  # dup
     assert _is_library_payload({"games": [{"game_id": "ok"}]})
-    assert _is_library_payload({"games": [{"title": "no id"}]})  # absent id defaults later
+    assert _is_library_payload({"games": [{"game_id": "a"}, {"game_id": "b"}]})
     # collection_id, when present, must be a string too.
     assert not _is_library_payload({"games": [], "collections": [{"collection_id": []}]})
 
