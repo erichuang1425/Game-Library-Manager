@@ -225,8 +225,52 @@ def test_empty_library_is_valid_payload():
     assert not _is_library_payload({"games": [{"game_id": "x"}, {"game_id": "x"}]})  # dup
     assert _is_library_payload({"games": [{"game_id": "ok"}]})
     assert _is_library_payload({"games": [{"game_id": "a"}, {"game_id": "b"}]})
-    # collection_id, when present, must be a string too.
+    # Each collection needs a non-empty, unique string collection_id, and a
+    # string name when present (consumers index by id and call name.lower()).
     assert not _is_library_payload({"games": [], "collections": [{"collection_id": []}]})
+    assert not _is_library_payload({"games": [], "collections": [{"name": "no id"}]})
+    assert not _is_library_payload({"games": [], "collections": [{"collection_id": ""}]})
+    assert not _is_library_payload(
+        {"games": [], "collections": [{"collection_id": "c"}, {"collection_id": "c"}]}
+    )
+    assert not _is_library_payload(
+        {"games": [], "collections": [{"collection_id": "c", "name": None}]}
+    )
+    assert not _is_library_payload(
+        {"games": [], "collections": [{"collection_id": "c", "name": 5}]}
+    )
+    assert _is_library_payload(
+        {"games": [], "collections": [{"collection_id": "c", "name": "Favorites"}]}
+    )
+    assert _is_library_payload({"games": [], "collections": [{"collection_id": "c"}]})
+
+
+def test_rotation_failure_aborts_write_and_preserves_live(tmp_path, isolated_fallback):
+    """P2: if the live file cannot be backed up, the write aborts before replace."""
+    path = tmp_path / "settings.json"
+    _atomic_write_json(path, {"v": 1})  # first write: live created, nothing to rotate
+
+    # The second write must rotate (copy live -> bak.1); make that copy fail.
+    with patch("app.storage.json_store.shutil.copy2", side_effect=OSError("no space")):
+        with pytest.raises(OSError, match="no space"):
+            _atomic_write_json(path, {"v": 2})
+
+    # Live file is untouched and no partial temp file is left behind.
+    assert json.loads(path.read_text(encoding="utf-8")) == {"v": 1}
+    assert list(tmp_path.glob("settings.json.*.tmp")) == []
+
+
+def test_save_falls_back_when_rotation_fails(tmp_path, isolated_fallback):
+    """A rotation failure on the primary redirects the save to the fallback."""
+    path = tmp_path / "settings.json"
+    _atomic_write_json(path, {"v": 1})
+
+    with patch("app.storage.json_store.shutil.copy2", side_effect=OSError("no space")):
+        save_settings(path, {"v": 2})
+
+    # Primary preserved; the new value landed in the fallback and is read back.
+    assert json.loads(path.read_text(encoding="utf-8")) == {"v": 1}
+    assert load_settings(path) == {"v": 2}
 
 
 def test_failed_serialization_does_not_rotate_backups(tmp_path, isolated_fallback):
