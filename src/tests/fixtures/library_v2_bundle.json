@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "games": [
+    {
+      "game_id": "game-010",
+      "title": "Neon Drift",
+      "status": "finished",
+      "rating": 8,
+      "tags": ["racing"],
+      "last_played": "2026-02-20T18:45:00+00:00",
+      "source_checked_at": "2026-02-19T09:15:00Z",
+      "last_download_at": "2026-02-18T10:00:00",
+      "developer": "Acme Studios",
+      "f95_thread_id": 55555
+    },
+    {
+      "game_id": "game-011",
+      "title": "Forest Tale",
+      "status": "backlog",
+      "tags": ["adventure"]
+    }
+  ],
+  "collections": [
+    {
+      "collection_id": "col-fav",
+      "name": "Favorites",
+      "type": "manual",
+      "manual_game_ids": ["game-010"]
+    },
+    {
+      "collection_id": "col-high",
+      "name": "Highly Rated",
+      "type": "smart",
+      "filter": {"rating_min": 8}
+    }
+  ]
+}
