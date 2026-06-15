@@ -17,6 +17,7 @@ from app.storage.json_store import (
     _fallback_path,
     load_library_bundle,
     load_settings,
+    save_library,
     save_library_bundle,
     save_settings,
 )
@@ -151,15 +152,47 @@ def test_marker_cleanup_failure_does_not_trigger_fallback_write(
 ) -> None:
     primary = tmp_path / "primary" / "settings.json"
     fallback_dir = tmp_path / "fallback"
+    real_atomic_write = _atomic_write_json
+
+    def fail_primary(path: Path, data: object) -> None:
+        if path == primary:
+            raise OSError("primary unavailable")
+        real_atomic_write(path, data)
 
     with (
         patch("app.storage.json_store.temp_data_dir", return_value=fallback_dir),
-        patch("pathlib.Path.unlink", side_effect=OSError("marker locked")),
+        patch("app.storage.json_store._atomic_write_json", side_effect=fail_primary),
     ):
-        save_settings(primary, {"theme": "primary"})
+        save_settings(primary, {"theme": "fallback"})
 
-    assert load_settings(primary) == {"theme": "primary"}
-    assert not fallback_dir.exists()
+    marker = None
+    with patch("app.storage.json_store.temp_data_dir", return_value=fallback_dir):
+        marker = _fallback_marker_path(primary)
+
+        def fail_marker_cleanup(target: Path, **_: object) -> None:
+            if target == marker:
+                raise OSError("marker locked")
+
+        with patch.object(
+            Path,
+            "unlink",
+            autospec=True,
+            side_effect=fail_marker_cleanup,
+        ):
+            save_settings(primary, {"theme": "primary"})
+
+        assert marker.exists()
+        assert load_settings(primary) == {"theme": "primary"}
+
+
+def test_legacy_save_library_writes_current_schema(tmp_path: Path) -> None:
+    path = tmp_path / "library.json"
+
+    save_library(path, [Game(game_id="game-1", title="Example")])
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["version"] == 2
+    assert document["collections"] == []
 
 
 def test_library_bundle_round_trips_every_datetime(tmp_path: Path) -> None:

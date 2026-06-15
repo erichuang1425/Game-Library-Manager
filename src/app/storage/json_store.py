@@ -124,8 +124,19 @@ def _read_json(path: Path) -> tuple[Any, Path]:
     if marker.exists():
         try:
             marker_data = json.loads(marker.read_text(encoding="utf-8"))
-            if marker_data.get("primary_path") == str(path.resolve(strict=False)):
+            marker_matches = marker_data.get("primary_path") == str(
+                path.resolve(strict=False)
+            )
+            primary_is_newer = (
+                path.exists() and path.stat().st_mtime_ns > marker.stat().st_mtime_ns
+            )
+            if marker_matches and fallback.exists() and not primary_is_newer:
                 candidates = [fallback, path, *candidates[2:]]
+            elif marker_matches and primary_is_newer:
+                _log.warning(
+                    "fallback_marker_stale %s",
+                    kv(path=marker, primary=path),
+                )
         except (OSError, AttributeError, json.JSONDecodeError):
             _log.warning("fallback_marker_invalid %s", kv(path=marker))
     failures: list[str] = []
@@ -285,8 +296,9 @@ def _str_to_dt(s: Optional[str]) -> Optional[datetime]:
 def save_library(path: Path, games: List[Game]) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
-        "version": 1,
+        "version": _LIBRARY_SCHEMA_VERSION,
         "games": [_serialize_game(game) for game in games],
+        "collections": [],
     }
     written_path, fallback_used = _write_with_fallback(path, data)
     _log.info(
