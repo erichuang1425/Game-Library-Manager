@@ -588,8 +588,8 @@ Targets must be validated on agreed reference hardware and adjusted once, during
 
 **Deliverables**
 
-- ✅ Atomic JSON writes, known-good backups, active-fallback markers, consistent fallback reads, and full datetime handling.
-- 🟡 Explicit JSON schema migration registry is implemented for library v1 → v2; historical fixtures and corruption recovery UX remain.
+- ✅ Atomic JSON writes, known-good backups, newest-valid recovery across primary/backup/fallback copies, and full datetime handling.
+- 🟡 Explicit JSON schema migration registry is implemented for library v1 → v2 with historical-fixture round-trip coverage; corruption recovery UX remains.
 - Blocking Ruff checks; introduce type checking for new core packages.
 - Windows CI lane for platform integration tests.
 - 🟡 Dead persistence APIs have been removed; repository mutation contracts still need clarification.
