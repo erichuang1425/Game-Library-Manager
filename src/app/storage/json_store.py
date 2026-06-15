@@ -7,7 +7,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.models import Game, Collection
 from app.logging_utils import get_logger, kv
@@ -18,138 +18,19 @@ from PySide6.QtCore import Qt
 
 _log = get_logger("storage.json")
 
-_DATETIME_FIELDS = ("last_played", "source_checked_at", "last_download_at")
-_BACKUP_COUNT = 3
+# Number of rotating known-good backup generations kept beside each persisted file.
+BACKUP_GENERATIONS = 3
 
-
-def _fallback_path(path: Path) -> Path:
-    """Return the deterministic emergency-storage path for *path*."""
-    return temp_data_dir() / path.name
-
-
-def _backup_path(path: Path, generation: int = 1) -> Path:
-    return path.with_name(f"{path.name}.bak.{generation}")
-
-
-def _rotate_backups(path: Path) -> None:
-    """Keep the last three known-good versions without modifying the live file."""
-    if not path.exists():
-        return
-    try:
-        json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        _log.warning("backup_skipped_invalid_source %s", kv(path=path))
-        return
-    for generation in range(_BACKUP_COUNT, 1, -1):
-        older = _backup_path(path, generation - 1)
-        newer = _backup_path(path, generation)
-        if older.exists():
-            os.replace(older, newer)
-    shutil.copy2(path, _backup_path(path))
-
-
-def _atomic_write_json(path: Path, data: Any) -> None:
-    """Durably write JSON beside the destination and atomically replace it."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, ensure_ascii=False, indent=2)
-    temp_name: Optional[str] = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            temp_name = handle.name
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        _rotate_backups(path)
-        os.replace(temp_name, path)
-        temp_name = None
-    finally:
-        if temp_name is not None:
-            Path(temp_name).unlink(missing_ok=True)
-
-
-def _write_with_fallback(path: Path, data: Any) -> tuple[Path, bool]:
-    try:
-        _atomic_write_json(path, data)
-        return path, False
-    except OSError as error:
-        fallback = _fallback_path(path)
-        try:
-            _atomic_write_json(fallback, data)
-        except OSError as fallback_error:
-            raise StorageError(
-                f"Unable to save data to {path} or fallback {fallback}"
-            ) from fallback_error
-        _log.error("save_fallback %s", kv(path=path, fallback=fallback, err=error))
-        _warn_fallback(fallback)
-        return fallback, True
-
-
-def _read_json(path: Path) -> tuple[Any, Path]:
-    """Read primary, fallback, or newest valid backup in recovery order."""
-    candidates = [path, _fallback_path(path)] + [
-        _backup_path(path, generation) for generation in range(1, _BACKUP_COUNT + 1)
-    ]
-    failures: list[str] = []
-    for candidate in candidates:
-        if not candidate.exists():
-            continue
-        try:
-            data = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            failures.append(f"{candidate}: {error}")
-            continue
-        if candidate != path:
-            _log.warning("load_recovered %s", kv(requested=path, source=candidate))
-        return data, candidate
-    if failures:
-        raise StorageError(
-            f"No valid JSON copy found for {path}: {'; '.join(failures)}"
-        )
-    raise FileNotFoundError(path)
-
-
-def _serialize_game(game: Game) -> Dict[str, Any]:
-    data = asdict(game)
-    for field_name in _DATETIME_FIELDS:
-        data[field_name] = _dt_to_str(getattr(game, field_name, None))
-    return data
-
-
-def _deserialize_game(obj: Dict[str, Any]) -> Game:
-    data = dict(obj)
-    for field_name in _DATETIME_FIELDS:
-        data[field_name] = _str_to_dt(data.get(field_name))
-    if "selected_launcher_path" in data and "backup_target_path" not in data:
-        data["backup_target_path"] = data.get("selected_launcher_path", "")
-    allowed = set(Game.__dataclass_fields__.keys())
-    cleaned = {key: value for key, value in data.items() if key in allowed}
-    cleaned.setdefault("game_id", "")
-    cleaned.setdefault("title", "Unknown")
-    cleaned.setdefault("game_folder_path", "")
-    cleaned.setdefault("icon_upscaled", False)
-    return Game(**cleaned)
+# Datetime fields on Game that must be round-tripped consistently.
+_GAME_DT_FIELDS = ("last_played", "source_checked_at", "last_download_at")
 
 
 def _warn_fallback(fb_path: Path) -> None:
     try:
         app = QApplication.instance()
         if app:
-            box = QMessageBox(
-                QMessageBox.Warning,
-                "Storage fallback",
-                f"Primary data path not writable.\nUsing: {fb_path}",
-                QMessageBox.Ok,
-            )
-            box.setWindowModality(
-                Qt.NonModal if hasattr(box, "setWindowModality") else 0
-            )
+            box = QMessageBox(QMessageBox.Warning, "Storage fallback", f"Primary data path not writable.\nUsing: {fb_path}", QMessageBox.Ok)
+            box.setWindowModality(Qt.NonModal if hasattr(box, "setWindowModality") else 0)
             box.setAttribute(Qt.WA_DeleteOnClose)
             box.show()
     except (RuntimeError, AttributeError):
@@ -172,7 +53,6 @@ def _str_to_dt(s: Optional[str]) -> Optional[datetime]:
       - other -> None (logged)
     """
     from app.logging_utils import get_logger
-
     log = get_logger("json_store")
 
     if s is None:
@@ -202,74 +82,316 @@ def _str_to_dt(s: Optional[str]) -> Optional[datetime]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Atomic write + recovery primitives
+# ---------------------------------------------------------------------------
+
+def _backup_path(path: Path, generation: int = 1) -> Path:
+    return path.with_name(f"{path.name}.bak.{generation}")
+
+
+def _fallback_path(path: Path) -> Path:
+    """Return the deterministic emergency-storage path for *path*."""
+    return temp_data_dir() / path.name
+
+
+def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
+    """Parse a JSON object from disk, returning None if missing/unreadable/not an object."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return raw
+
+
+def _is_library_payload(data: Dict[str, Any]) -> bool:
+    """
+    A recoverable library/bundle payload must carry a `games` list of objects,
+    each with a usable identity: a non-empty string `game_id`, unique across the
+    list. This rejects parseable-but-wrong-shaped data (e.g. `{}`, a copied
+    settings object, `{"games": [{"game_id": []}]}`, or games with missing/empty/
+    duplicate ids) so it cannot outrank a known-good backup and either hide
+    recoverable user data behind an empty library or corrupt a downstream index
+    that keys games by id (collapsing or mis-targeting entries).
+    """
+    games = data.get("games")
+    if not isinstance(games, list):
+        return False
+    seen_game_ids: set = set()
+    for g in games:
+        if not isinstance(g, dict):
+            return False
+        # game_id is used as a dict key downstream; require a non-empty, unique str.
+        gid = g.get("game_id")
+        if not isinstance(gid, str) or not gid:
+            return False
+        if gid in seen_game_ids:
+            return False
+        seen_game_ids.add(gid)
+    collections = data.get("collections")
+    if collections is not None:
+        if not isinstance(collections, list):
+            return False
+        seen_collection_ids: set = set()
+        for c in collections:
+            if not isinstance(c, dict):
+                return False
+            # collection_id is used to resolve/mutate/delete collections; it must
+            # be a non-empty, unique str (a duplicate id deletes several at once).
+            cid = c.get("collection_id")
+            if not isinstance(cid, str) or not cid:
+                return False
+            if cid in seen_collection_ids:
+                return False
+            seen_collection_ids.add(cid)
+            # name, when the key is present, must be a str (consumers call
+            # name.lower()); an explicit null survives setdefault and crashes.
+            if "name" in c and not isinstance(c["name"], str):
+                return False
+    return True
+
+
+def _rotate_backup(path: Path) -> None:
+    """
+    Promote the current live file into the rotating backup chain.
+
+    Only rotates when the live file contains valid JSON, so a corrupted live file
+    is never promoted into the known-good backup set. Backups preserve the
+    original modification time (copy2) so newest-valid recovery stays meaningful.
+
+    Critical rotation steps (the generation shift and the copy of the current
+    live file into bak.1) propagate OSError. This is intentional: it lets
+    _atomic_write_json abort *before* os.replace when the previous live version
+    cannot be safely retained, so a storage failure never silently replaces the
+    live file without preserving a known-good copy.
+    """
+    if _read_json_file(path) is None:
+        return
+
+    # Removing the about-to-fall-off generation is non-critical: the os.replace
+    # below overwrites that slot atomically anyway.
+    oldest = _backup_path(path, BACKUP_GENERATIONS)
+    try:
+        if oldest.exists():
+            oldest.unlink()
+    except OSError:
+        pass
+
+    for gen in range(BACKUP_GENERATIONS - 1, 0, -1):
+        src = _backup_path(path, gen)
+        dst = _backup_path(path, gen + 1)
+        if src.exists():
+            os.replace(src, dst)
+
+    shutil.copy2(path, _backup_path(path, 1))
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    """
+    Write JSON atomically: serialize to a fsynced temp file in the destination
+    directory, then atomically replace the target via os.replace.
+
+    Serialization and the fsynced temp file are fully prepared *before* the
+    backup chain is rotated, so a failed save (unserializable value, disk
+    exhaustion, temp-file failure) cannot advance the generations and evict
+    known-good snapshots while the live file was never replaced. Rotation
+    happens immediately before the atomic replace.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Prepare the replacement first; any failure here leaves backups untouched.
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f"{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        # Replacement is durable on disk; now rotate and swap.
+        _rotate_backup(path)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _write_with_fallback(path: Path, data: Any) -> Path:
+    """
+    Atomically write to the primary path; on failure fall back to a temp
+    directory copy (also written atomically, with its own backup chain).
+    Returns the path actually written so callers can report the active location.
+    Raises StorageError if both the primary and fallback writes fail.
+    """
+    try:
+        _atomic_write_json(path, data)
+        return path
+    except OSError as error:
+        fb_path = _fallback_path(path)
+        try:
+            _atomic_write_json(fb_path, data)
+        except OSError as fb_error:
+            raise StorageError(
+                f"Unable to save data to {path} or fallback {fb_path}"
+            ) from fb_error
+        _log.error("write_fallback %s", kv(path=path, fallback=str(fb_path), err=error))
+        _warn_fallback(fb_path)
+        return fb_path
+
+
+def _candidate_paths(path: Path) -> List[Path]:
+    """
+    All persisted copies that may hold recoverable data for a logical path:
+    the primary and its backup generations, plus the fallback and ITS backup
+    generations (these exist when the primary stayed unwritable across saves).
+    """
+    candidates = [path]
+    candidates += [_backup_path(path, g) for g in range(1, BACKUP_GENERATIONS + 1)]
+    fb = _fallback_path(path)
+    candidates.append(fb)
+    candidates += [_backup_path(fb, g) for g in range(1, BACKUP_GENERATIONS + 1)]
+    return candidates
+
+
+def _read_with_recovery(
+    path: Path,
+    validate: Optional[Callable[[Dict[str, Any]], bool]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Return the newest valid persisted copy among all candidates.
+
+    Selection is by modification time (nanosecond resolution) rather than a
+    fixed primary->fallback precedence, so a fallback save made after a transient
+    primary failure is not silently discarded, and a stale fallback never
+    outranks a newer primary or backup. Fallback backup generations are included
+    so recovery succeeds even if the active fallback later becomes corrupt.
+
+    A candidate is only eligible if it parses as a JSON object AND satisfies the
+    optional `validate` schema predicate, so parseable-but-wrong-shaped data
+    cannot outrank a known-good backup.
+
+    Returns:
+      - dict: contents of the newest valid copy
+      - None: no candidate file exists at all (fresh install)
+    Raises:
+      - StorageError: candidate files exist but none are valid/recoverable
+    """
+    best: Optional[tuple[int, Dict[str, Any], Path]] = None
+    any_existed = False
+
+    for cand in _candidate_paths(path):
+        if not cand.exists():
+            continue
+        any_existed = True
+        data = _read_json_file(cand)
+        if data is None or (validate is not None and not validate(data)):
+            _log.warning("recovery_skip_invalid %s", kv(path=cand))
+            continue
+        try:
+            mtime_ns = cand.stat().st_mtime_ns
+        except OSError:
+            continue
+        if best is None or mtime_ns > best[0]:
+            best = (mtime_ns, data, cand)
+
+    if best is not None:
+        if best[2] != path:
+            _log.warning("recovery_used %s", kv(path=path, recovered_from=str(best[2])))
+        return best[1]
+
+    if any_existed:
+        raise StorageError(f"All persisted copies of {path.name} are unreadable or corrupt")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Game (de)serialization
+# ---------------------------------------------------------------------------
+
+def _serialize_game(g: Game) -> Dict[str, Any]:
+    obj = asdict(g)
+    for field in _GAME_DT_FIELDS:
+        obj[field] = _dt_to_str(getattr(g, field, None))
+    return obj
+
+
+def _deserialize_game(obj: Dict[str, Any]) -> Game:
+    """
+    Backward compatible game loader:
+    - Ignores unknown fields from older versions
+    - Migrates old key names when possible
+    """
+    data = dict(obj)
+    allowed = set(Game.__dataclass_fields__.keys())
+
+    for field in _GAME_DT_FIELDS:
+        if field in data:
+            data[field] = _str_to_dt(data.get(field))
+
+    # If old model used selected_launcher_path, treat it as backup target
+    if "selected_launcher_path" in data and "backup_target_path" not in data:
+        data["backup_target_path"] = data.get("selected_launcher_path", "")
+
+    cleaned = {k: v for k, v in data.items() if k in allowed}
+
+    # Ensure required fields exist
+    cleaned.setdefault("game_id", "")
+    cleaned.setdefault("title", "Unknown")
+    cleaned.setdefault("game_folder_path", "")
+    cleaned.setdefault("icon_upscaled", False)
+
+    return Game(**cleaned)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def save_library(path: Path, games: List[Game]) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
         "version": 1,
-        "games": [_serialize_game(game) for game in games],
+        "games": [_serialize_game(g) for g in games],
     }
-    written_path, fallback_used = _write_with_fallback(path, data)
-    _log.info(
-        "save_library_done %s",
-        kv(
-            path=written_path,
-            count=len(games),
-            bytes=written_path.stat().st_size,
-            duration_ms=round((time.perf_counter() - start) * 1000, 1),
-            fallback_used=fallback_used,
-        ),
-    )
+    written = _write_with_fallback(path, data)
+    _log.info("save_library_done %s", kv(path=written, count=len(games),
+                                         bytes=written.stat().st_size if written.exists() else 0,
+                                         duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                                         fallback_used=written != path))
 
 
 def load_library(path: Path) -> List[Game]:
-    """Load the library, recovering from fallback storage or backups if needed."""
     start = time.perf_counter()
-    try:
-        raw, source = _read_json(path)
-    except FileNotFoundError:
+    raw = _read_with_recovery(path, validate=_is_library_payload)
+    if raw is None:
         _log.warning("load_library_missing %s", kv(path=path))
         return []
+
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
-    _log.info(
-        "load_library_done %s",
-        kv(
-            path=source,
-            count=len(games),
-            duration_ms=round((time.perf_counter() - start) * 1000, 1),
-        ),
-    )
+    _log.info("load_library_done %s", kv(path=path, count=len(games), duration_ms=round((time.perf_counter() - start) * 1000, 1)))
     return games
 
 
 def save_settings(path: Path, settings: Dict[str, Any]) -> None:
     start = time.perf_counter()
-    written_path, fallback_used = _write_with_fallback(path, settings)
-    _log.info(
-        "save_settings_done %s",
-        kv(
-            path=written_path,
-            keys=len(settings),
-            duration_ms=round((time.perf_counter() - start) * 1000, 1),
-            fallback_used=fallback_used,
-        ),
-    )
+    written = _write_with_fallback(path, settings)
+    _log.info("save_settings_done %s", kv(path=written, keys=len(settings),
+                                          duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                                          fallback_used=written != path))
 
 
 def load_settings(path: Path) -> Dict[str, Any]:
     start = time.perf_counter()
-    try:
-        data, source = _read_json(path)
-    except FileNotFoundError:
+    data = _read_with_recovery(path)
+    if data is None:
         _log.warning("load_settings_missing %s", kv(path=path))
         return {}
-    _log.info(
-        "load_settings_done %s",
-        kv(
-            path=source,
-            keys=len(data),
-            duration_ms=round((time.perf_counter() - start) * 1000, 1),
-        ),
-    )
+    _log.info("load_settings_done %s", kv(path=path, keys=len(data), duration_ms=round((time.perf_counter() - start) * 1000, 1)))
     return data
 
 
@@ -285,45 +407,43 @@ def load_collections(path: Path) -> List[Collection]:
     raise NotImplementedError("Use load_library_bundle instead")
 
 
-def save_library_bundle(
-    path: Path, games: List[Game], collections: List[Collection]
-) -> None:
+def save_library_bundle(path: Path, games: List[Game], collections: List[Collection]) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
         "version": 2,
-        "games": [_serialize_game(game) for game in games],
-        "collections": [asdict(collection) for collection in collections],
+        "games": [_serialize_game(g) for g in games],
+        "collections": [asdict(c) for c in collections],
     }
-    written_path, fallback_used = _write_with_fallback(path, data)
-    _log.info(
-        "save_library_bundle_done %s",
-        kv(
-            path=written_path,
-            games=len(games),
-            collections=len(collections),
-            bytes=written_path.stat().st_size,
-            duration_ms=round((time.perf_counter() - start) * 1000, 1),
-            fallback_used=fallback_used,
-        ),
-    )
+    written = _write_with_fallback(path, data)
+    _log.info("save_library_bundle_done %s", kv(path=written, games=len(games), collections=len(collections),
+                                                bytes=written.stat().st_size if written.exists() else 0,
+                                                duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                                                fallback_used=written != path))
 
 
 def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
-    """Load a v1/v2 bundle, recovering from fallback storage or backups."""
-    try:
-        raw, _source = _read_json(path)
-    except FileNotFoundError:
+    """
+    Backward compatible:
+    - v1 had only games
+    - v2 has games + collections
+    """
+    raw = _read_with_recovery(path, validate=_is_library_payload)
+    if raw is None:
         return [], []
 
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
+
+    # ---- collections (v2 only; safe if missing) ----
     collections: List[Collection] = []
-    allowed = set(Collection.__dataclass_fields__.keys())
+    allowed_col = set(Collection.__dataclass_fields__.keys())
     for obj in raw.get("collections", []):
-        cleaned = {key: value for key, value in obj.items() if key in allowed}
+        cleaned = {k: v for k, v in obj.items() if k in allowed_col}
         cleaned.setdefault("collection_id", "")
         cleaned.setdefault("name", "Untitled")
         cleaned.setdefault("type", "manual")
+        # migrate legacy manual_game_ids -> game_ids
         if "game_ids" not in cleaned and "manual_game_ids" in obj:
             cleaned["game_ids"] = obj.get("manual_game_ids", [])
         collections.append(Collection(**cleaned))
+
     return games, collections
