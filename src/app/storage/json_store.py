@@ -134,10 +134,21 @@ def _is_library_payload(data: Dict[str, Any]) -> bool:
     if collections is not None:
         if not isinstance(collections, list):
             return False
+        seen_collection_ids: set = set()
         for c in collections:
             if not isinstance(c, dict):
                 return False
-            if "collection_id" in c and not isinstance(c["collection_id"], str):
+            # collection_id is used to resolve/mutate/delete collections; it must
+            # be a non-empty, unique str (a duplicate id deletes several at once).
+            cid = c.get("collection_id")
+            if not isinstance(cid, str) or not cid:
+                return False
+            if cid in seen_collection_ids:
+                return False
+            seen_collection_ids.add(cid)
+            # name, when the key is present, must be a str (consumers call
+            # name.lower()); an explicit null survives setdefault and crashes.
+            if "name" in c and not isinstance(c["name"], str):
                 return False
     return True
 
@@ -149,10 +160,18 @@ def _rotate_backup(path: Path) -> None:
     Only rotates when the live file contains valid JSON, so a corrupted live file
     is never promoted into the known-good backup set. Backups preserve the
     original modification time (copy2) so newest-valid recovery stays meaningful.
+
+    Critical rotation steps (the generation shift and the copy of the current
+    live file into bak.1) propagate OSError. This is intentional: it lets
+    _atomic_write_json abort *before* os.replace when the previous live version
+    cannot be safely retained, so a storage failure never silently replaces the
+    live file without preserving a known-good copy.
     """
     if _read_json_file(path) is None:
         return
 
+    # Removing the about-to-fall-off generation is non-critical: the os.replace
+    # below overwrites that slot atomically anyway.
     oldest = _backup_path(path, BACKUP_GENERATIONS)
     try:
         if oldest.exists():
@@ -164,15 +183,9 @@ def _rotate_backup(path: Path) -> None:
         src = _backup_path(path, gen)
         dst = _backup_path(path, gen + 1)
         if src.exists():
-            try:
-                os.replace(src, dst)
-            except OSError:
-                pass
+            os.replace(src, dst)
 
-    try:
-        shutil.copy2(path, _backup_path(path, 1))
-    except OSError:
-        pass
+    shutil.copy2(path, _backup_path(path, 1))
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
