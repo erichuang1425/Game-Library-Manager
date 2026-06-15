@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,11 +21,17 @@ _log = get_logger("storage.json")
 
 _DATETIME_FIELDS = ("last_played", "source_checked_at", "last_download_at")
 _BACKUP_COUNT = 3
+_LIBRARY_SCHEMA_VERSION = 2
 
 
 def _fallback_path(path: Path) -> Path:
     """Return the deterministic emergency-storage path for *path*."""
     return temp_data_dir() / path.name
+
+
+def _fallback_marker_path(path: Path) -> Path:
+    """Return the marker that identifies which primary owns a fallback file."""
+    return _fallback_path(path).with_name(f"{path.name}.fallback.json")
 
 
 def _backup_path(path: Path, generation: int = 1) -> Path:
@@ -77,11 +84,16 @@ def _atomic_write_json(path: Path, data: Any) -> None:
 def _write_with_fallback(path: Path, data: Any) -> tuple[Path, bool]:
     try:
         _atomic_write_json(path, data)
+        _fallback_marker_path(path).unlink(missing_ok=True)
         return path, False
     except OSError as error:
         fallback = _fallback_path(path)
         try:
             _atomic_write_json(fallback, data)
+            _atomic_write_json(
+                _fallback_marker_path(path),
+                {"primary_path": str(path.resolve(strict=False))},
+            )
         except OSError as fallback_error:
             raise StorageError(
                 f"Unable to save data to {path} or fallback {fallback}"
@@ -93,9 +105,18 @@ def _write_with_fallback(path: Path, data: Any) -> tuple[Path, bool]:
 
 def _read_json(path: Path) -> tuple[Any, Path]:
     """Read primary, fallback, or newest valid backup in recovery order."""
-    candidates = [path, _fallback_path(path)] + [
+    fallback = _fallback_path(path)
+    candidates = [path, fallback] + [
         _backup_path(path, generation) for generation in range(1, _BACKUP_COUNT + 1)
     ]
+    marker = _fallback_marker_path(path)
+    if marker.exists():
+        try:
+            marker_data = json.loads(marker.read_text(encoding="utf-8"))
+            if marker_data.get("primary_path") == str(path.resolve(strict=False)):
+                candidates = [fallback, path, *candidates[2:]]
+        except (OSError, AttributeError, json.JSONDecodeError):
+            _log.warning("fallback_marker_invalid %s", kv(path=marker))
     failures: list[str] = []
     for candidate in candidates:
         if not candidate.exists():
@@ -113,6 +134,54 @@ def _read_json(path: Path) -> tuple[Any, Path]:
             f"No valid JSON copy found for {path}: {'; '.join(failures)}"
         )
     raise FileNotFoundError(path)
+
+
+def _validate_library_document(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise StorageError("Library JSON must contain an object at the top level")
+    version = raw.get("version", 1)
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise StorageError(f"Invalid library schema version: {version!r}")
+    if version > _LIBRARY_SCHEMA_VERSION:
+        raise StorageError(
+            f"Library schema version {version} is newer than supported "
+            f"version {_LIBRARY_SCHEMA_VERSION}"
+        )
+    for key in ("games", "collections"):
+        if key in raw and not isinstance(raw[key], list):
+            raise StorageError(f"Library field {key!r} must contain a list")
+        if key in raw and any(not isinstance(item, dict) for item in raw[key]):
+            raise StorageError(f"Library field {key!r} must contain only objects")
+    return raw
+
+
+def _migrate_library_v1_to_v2(raw: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(raw)
+    migrated.setdefault("collections", [])
+    migrated["version"] = 2
+    return migrated
+
+
+_LIBRARY_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
+    1: _migrate_library_v1_to_v2,
+}
+
+
+def _migrate_library_document(raw: Any) -> Dict[str, Any]:
+    document = _validate_library_document(raw)
+    version = document.get("version", 1)
+    while version < _LIBRARY_SCHEMA_VERSION:
+        migration = _LIBRARY_MIGRATIONS.get(version)
+        if migration is None:
+            raise StorageError(f"No library migration registered for version {version}")
+        document = _validate_library_document(migration(document))
+        next_version = document.get("version")
+        if next_version != version + 1:
+            raise StorageError(
+                f"Library migration {version} produced invalid version {next_version!r}"
+            )
+        version = next_version
+    return document
 
 
 def _serialize_game(game: Game) -> Dict[str, Any]:
@@ -229,6 +298,7 @@ def load_library(path: Path) -> List[Game]:
     except FileNotFoundError:
         _log.warning("load_library_missing %s", kv(path=path))
         return []
+    raw = _migrate_library_document(raw)
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
     _log.info(
         "load_library_done %s",
@@ -262,6 +332,8 @@ def load_settings(path: Path) -> Dict[str, Any]:
     except FileNotFoundError:
         _log.warning("load_settings_missing %s", kv(path=path))
         return {}
+    if not isinstance(data, dict):
+        raise StorageError("Settings JSON must contain an object at the top level")
     _log.info(
         "load_settings_done %s",
         kv(
@@ -273,24 +345,12 @@ def load_settings(path: Path) -> Dict[str, Any]:
     return data
 
 
-def save_collections(path: Path, collections: List[Collection]) -> None:
-    """
-    Save both games + collections in the same file.
-    (We keep the old function names, but we’ll update save_library/load_library to include collections.)
-    """
-    raise NotImplementedError("Use save_library_bundle instead")
-
-
-def load_collections(path: Path) -> List[Collection]:
-    raise NotImplementedError("Use load_library_bundle instead")
-
-
 def save_library_bundle(
     path: Path, games: List[Game], collections: List[Collection]
 ) -> None:
     start = time.perf_counter()
     data: Dict[str, Any] = {
-        "version": 2,
+        "version": _LIBRARY_SCHEMA_VERSION,
         "games": [_serialize_game(game) for game in games],
         "collections": [asdict(collection) for collection in collections],
     }
@@ -315,6 +375,7 @@ def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
     except FileNotFoundError:
         return [], []
 
+    raw = _migrate_library_document(raw)
     games = [_deserialize_game(obj) for obj in raw.get("games", [])]
     collections: List[Collection] = []
     allowed = set(Collection.__dataclass_fields__.keys())

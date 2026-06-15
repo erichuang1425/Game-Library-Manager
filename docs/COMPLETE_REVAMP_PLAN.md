@@ -1,6 +1,6 @@
 # Game Library Manager: Complete Revamp Plan
 
-> **Status:** Proposed execution blueprint  
+> **Status:** In progress — Milestone 1
 > **Prepared:** 2026-06-14  
 > **Scope:** Product, UX, architecture, data, reliability, testing, delivery, and documentation  
 > **Planning horizon:** 8 milestones / approximately 16–22 focused engineering weeks  
@@ -574,11 +574,11 @@ Targets must be validated on agreed reference hardware and adjusted once, during
 
 **Deliverables**
 
-- Atomic JSON writes, known-good backups, consistent fallback reads, full datetime handling.
-- Explicit JSON schema migration registry and corruption recovery UX.
+- ✅ Atomic JSON writes, known-good backups, active-fallback markers, consistent fallback reads, and full datetime handling.
+- 🟡 Explicit JSON schema migration registry is implemented for library v1 → v2; historical fixtures and corruption recovery UX remain.
 - Blocking Ruff checks; introduce type checking for new core packages.
 - Windows CI lane for platform integration tests.
-- Remove or isolate dead persistence APIs and clarify repository mutation contracts.
+- 🟡 Dead persistence APIs have been removed; repository mutation contracts still need clarification.
 - Security review of credential/session storage and log redaction.
 
 **Exit criteria**
