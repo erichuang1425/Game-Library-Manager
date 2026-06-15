@@ -200,8 +200,7 @@ class ActionsMixin:
             strategy = strategy_map.get(choice, "skip")
 
             merged, stats = merge_imported_games(self._all_games, games, strategy)
-            self._all_games = merged
-            self._rebuild_game_index()
+            self._repo.update_all(merged)
             self._rebuild_search_cache()
 
             # Merge collections if any

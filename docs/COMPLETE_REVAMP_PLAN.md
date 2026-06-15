@@ -592,7 +592,7 @@ Targets must be validated on agreed reference hardware and adjusted once, during
 - 🟡 Explicit JSON schema migration registry is implemented for library v1 → v2 with historical-fixture round-trip coverage; corruption recovery UX remains.
 - Blocking Ruff checks; introduce type checking for new core packages.
 - Windows CI lane for platform integration tests.
-- 🟡 Dead persistence APIs have been removed; repository mutation contracts still need clarification.
+- ✅ Dead persistence APIs have been removed and the repository mutation contract is now explicit: `get_all()`, `index`, and `get_collections()` return stable-identity live references, all structural changes go through repository methods (`add`/`upsert`/`remove`/`update_all`/`set_collections`), and `MainWindow` exposes them as read-only properties so the window and repository can no longer diverge or silently bypass persistence.
 - Security review of credential/session storage and log redaction.
 
 **Exit criteria**

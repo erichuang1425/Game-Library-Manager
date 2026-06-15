@@ -177,8 +177,7 @@ class ScanMixin:
         before_keys = {self._game_key(g) for g in self._all_games}
         scanned_keys = {self._game_key(g) for g in games}
 
-        self._all_games = merge_scanned_into_library(self._all_games, games)
-        self._rebuild_game_index()
+        self._repo.update_all(merge_scanned_into_library(self._all_games, games))
         after = len(self._all_games)
         delta = after - before
         new_count = len(scanned_keys - before_keys)

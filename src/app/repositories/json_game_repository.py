@@ -36,13 +36,29 @@ class JsonGameRepository(GameRepository):
         self._games.append(game)
         self._index[game.game_id] = game
 
+    def upsert(self, game: Game) -> None:
+        """Insert *game*, or replace an existing game with the same id."""
+        if game.game_id in self._index:
+            for i, existing in enumerate(self._games):
+                if existing.game_id == game.game_id:
+                    self._games[i] = game
+                    break
+        else:
+            self._games.append(game)
+        self._index[game.game_id] = game
+
     def remove(self, game_id: str) -> None:
-        self._games = [g for g in self._games if g.game_id != game_id]
-        self._index.pop(game_id, None)
+        if self._index.pop(game_id, None) is not None:
+            # Mutate the existing list in place so get_all() aliases stay valid.
+            self._games[:] = [g for g in self._games if g.game_id != game_id]
 
     def update_all(self, games: List[Game]) -> None:
-        """Replace the full game list and rebuild index."""
-        self._games = games
+        """Replace the full game list in place and rebuild the index.
+
+        Slice-assignment preserves the identity of the list returned by
+        get_all(), so any alias a caller is holding remains current.
+        """
+        self._games[:] = games
         self._rebuild_index()
 
     def save(self) -> None:
@@ -52,7 +68,8 @@ class JsonGameRepository(GameRepository):
         return self._collections
 
     def set_collections(self, collections: List[Collection]) -> None:
-        self._collections = collections
+        # In place so get_collections() aliases stay valid.
+        self._collections[:] = collections
 
     def save_collections(self) -> None:
         self.save()
@@ -66,4 +83,6 @@ class JsonGameRepository(GameRepository):
         return self._index
 
     def _rebuild_index(self) -> None:
-        self._index = {g.game_id: g for g in self._games}
+        # Rebuild in place to preserve the identity of the dict returned by index.
+        self._index.clear()
+        self._index.update((g.game_id, g) for g in self._games)
