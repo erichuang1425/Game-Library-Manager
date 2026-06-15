@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "games": [
+    {
+      "game_id": "game-001",
+      "title": "Stellar Odyssey",
+      "status": "playing",
+      "rating": 9,
+      "tags": ["sci-fi", "rpg"],
+      "last_played": "2026-01-15T20:30:00Z",
+      "launch_count": 42,
+      "source_url": "https://example.com/thread/123",
+      "source_checked_at": "2026-01-10T08:00:00",
+      "last_download_at": 1700000000,
+      "shortcut_path": "C:\\Shortcuts\\StellarOdyssey.lnk",
+      "shortcut_type": "lnk"
+    },
+    {
+      "game_id": "game-002",
+      "title": "Pixel Quest",
+      "status": "backlog",
+      "tags": ["retro"],
+      "selected_launcher_path": "D:\\Games\\PixelQuest\\pixelquest.exe",
+      "last_played": "2025-12-01T12:00:00",
+      "legacy_only_field": "dropped on load"
+    }
+  ]
+}
