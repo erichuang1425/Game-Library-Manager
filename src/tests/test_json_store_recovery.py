@@ -13,6 +13,8 @@ from app.exceptions import StorageError
 from app.models import Collection, Game
 from app.storage.json_store import (
     _atomic_write_json,
+    _fallback_marker_path,
+    _fallback_path,
     load_library_bundle,
     load_settings,
     save_library_bundle,
@@ -130,7 +132,34 @@ def test_successful_primary_write_clears_fallback_marker(tmp_path: Path) -> None
     with patch("app.storage.json_store.temp_data_dir", return_value=fallback_dir):
         save_settings(primary, {"theme": "primary"})
         assert load_settings(primary) == {"theme": "primary"}
-        assert not (fallback_dir / "settings.json.fallback.json").exists()
+        assert not _fallback_marker_path(primary).exists()
+
+
+def test_fallback_paths_do_not_collide_for_matching_filenames(
+    tmp_path: Path,
+) -> None:
+    fallback_dir = tmp_path / "fallback"
+    first = tmp_path / "profile-a" / "settings.json"
+    second = tmp_path / "profile-b" / "settings.json"
+
+    with patch("app.storage.json_store.temp_data_dir", return_value=fallback_dir):
+        assert _fallback_path(first) != _fallback_path(second)
+
+
+def test_marker_cleanup_failure_does_not_trigger_fallback_write(
+    tmp_path: Path,
+) -> None:
+    primary = tmp_path / "primary" / "settings.json"
+    fallback_dir = tmp_path / "fallback"
+
+    with (
+        patch("app.storage.json_store.temp_data_dir", return_value=fallback_dir),
+        patch("pathlib.Path.unlink", side_effect=OSError("marker locked")),
+    ):
+        save_settings(primary, {"theme": "primary"})
+
+    assert load_settings(primary) == {"theme": "primary"}
+    assert not fallback_dir.exists()
 
 
 def test_library_bundle_round_trips_every_datetime(tmp_path: Path) -> None:
