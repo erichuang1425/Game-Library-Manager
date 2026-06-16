@@ -14,6 +14,8 @@ __all__ = [
     "save_settings",
     "load_library_bundle",
     "save_library_bundle",
+    "load_library_bundle_with_recovery",
+    "RecoveryReport",
 ]
 
 
@@ -25,6 +27,8 @@ def __getattr__(name):
         "save_settings",
         "load_library_bundle",
         "save_library_bundle",
+        "load_library_bundle_with_recovery",
+        "RecoveryReport",
     }:
         mod = import_module(".json_store", __name__)
         return getattr(mod, name)
