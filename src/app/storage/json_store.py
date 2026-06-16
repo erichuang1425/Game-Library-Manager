@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -262,12 +262,43 @@ def _candidate_paths(path: Path) -> List[Path]:
     return candidates
 
 
-def _read_with_recovery(
+@dataclass(frozen=True)
+class RecoveryReport:
+    """
+    Describes how a load resolved, so the UI can explain corruption recovery to
+    the user instead of recovering (or crashing) silently.
+
+    - ``recovered``: data came from a non-primary copy (a backup or the
+      emergency fallback) because the primary was missing/corrupt.
+    - ``fatal``: candidate files existed but none were usable; no data could be
+      loaded.
+    - ``source``: the copy actually used, or ``None`` for a fresh/missing or
+      fatal load.
+    - ``skipped``: candidate copies that existed but were unreadable or
+      wrong-shaped.
+    - ``quarantined``: corrupt copies preserved aside (``.corrupt-*``) before an
+      empty library could overwrite them; only set for the fatal path.
+    """
+
+    path: Path
+    source: Optional[Path] = None
+    recovered: bool = False
+    fatal: bool = False
+    skipped: tuple[Path, ...] = ()
+    quarantined: tuple[Path, ...] = ()
+
+    @property
+    def needs_notice(self) -> bool:
+        """True when the user should be told something non-routine happened."""
+        return self.recovered or self.fatal
+
+
+def _recover(
     path: Path,
     validate: Optional[Callable[[Dict[str, Any]], bool]] = None,
-) -> Optional[Dict[str, Any]]:
+) -> tuple[Optional[Dict[str, Any]], RecoveryReport]:
     """
-    Return the newest valid persisted copy among all candidates.
+    Resolve the newest valid persisted copy among all candidates and report how.
 
     Selection is by modification time (nanosecond resolution) rather than a
     fixed primary->fallback precedence, so a fallback save made after a transient
@@ -279,13 +310,12 @@ def _read_with_recovery(
     optional `validate` schema predicate, so parseable-but-wrong-shaped data
     cannot outrank a known-good backup.
 
-    Returns:
-      - dict: contents of the newest valid copy
-      - None: no candidate file exists at all (fresh install)
-    Raises:
-      - StorageError: candidate files exist but none are valid/recoverable
+    Returns ``(data, report)`` where ``data`` is the newest valid copy, ``None``
+    for a fresh install, or ``None`` with ``report.fatal`` set when candidates
+    exist but none are recoverable.
     """
     best: Optional[tuple[int, Dict[str, Any], Path]] = None
+    skipped: List[Path] = []
     any_existed = False
 
     for cand in _candidate_paths(path):
@@ -295,6 +325,7 @@ def _read_with_recovery(
         data = _read_json_file(cand)
         if data is None or (validate is not None and not validate(data)):
             _log.warning("recovery_skip_invalid %s", kv(path=cand))
+            skipped.append(cand)
             continue
         try:
             mtime_ns = cand.stat().st_mtime_ns
@@ -304,13 +335,55 @@ def _read_with_recovery(
             best = (mtime_ns, data, cand)
 
     if best is not None:
-        if best[2] != path:
-            _log.warning("recovery_used %s", kv(path=path, recovered_from=str(best[2])))
-        return best[1]
+        source = best[2]
+        recovered = source != path
+        if recovered:
+            _log.warning("recovery_used %s", kv(path=path, recovered_from=str(source)))
+        return best[1], RecoveryReport(
+            path=path, source=source, recovered=recovered, skipped=tuple(skipped)
+        )
 
-    if any_existed:
+    return None, RecoveryReport(path=path, fatal=any_existed, skipped=tuple(skipped))
+
+
+def _read_with_recovery(
+    path: Path,
+    validate: Optional[Callable[[Dict[str, Any]], bool]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Return the newest valid persisted copy, or ``None`` for a fresh install.
+
+    Raises ``StorageError`` when candidate files exist but none are recoverable.
+    Callers that want to surface recovery to the user without crashing should use
+    ``_recover`` (and the ``*_with_recovery`` public loaders) instead.
+    """
+    data, report = _recover(path, validate)
+    if report.fatal:
         raise StorageError(f"All persisted copies of {path.name} are unreadable or corrupt")
-    return None
+    return data
+
+
+def _quarantine_corrupt(report: RecoveryReport) -> tuple[Path, ...]:
+    """
+    Copy unreadable candidate files aside to timestamped ``.corrupt-*`` siblings.
+
+    Used on the fatal path before the app starts with an empty library: the next
+    save would otherwise overwrite the (still potentially salvageable) corrupt
+    primary, so we preserve a forensic copy first. Best-effort and never raises;
+    a quarantine that fails is logged and simply omitted from the report.
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    saved: List[Path] = []
+    for src in report.skipped:
+        try:
+            if not src.exists():
+                continue
+            dst = src.with_name(f"{src.name}.corrupt-{stamp}")
+            shutil.copy2(src, dst)
+            saved.append(dst)
+        except OSError as error:
+            _log.error("quarantine_failed %s", kv(path=src, err=error))
+    return tuple(saved)
 
 
 # ---------------------------------------------------------------------------
@@ -466,20 +539,8 @@ def save_library_bundle(path: Path, games: List[Game], collections: List[Collect
                                                 fallback_used=written != path))
 
 
-def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
-    """
-    Backward compatible:
-    - v1 had only games
-    - v2 has games + collections
-    """
-    raw = _read_with_recovery(path, validate=_is_library_payload)
-    if raw is None:
-        return [], []
-
-    raw = _migrate_library_document(raw)
-    games = [_deserialize_game(obj) for obj in raw.get("games", [])]
-
-    # ---- collections (v2 only; safe if missing) ----
+def _parse_collections(raw: Dict[str, Any]) -> List[Collection]:
+    """Build Collection objects from a (migrated) library document. v2 only; safe if missing."""
     collections: List[Collection] = []
     allowed_col = set(Collection.__dataclass_fields__.keys())
     for obj in raw.get("collections", []):
@@ -491,5 +552,63 @@ def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
         if "game_ids" not in cleaned and "manual_game_ids" in obj:
             cleaned["game_ids"] = obj.get("manual_game_ids", [])
         collections.append(Collection(**cleaned))
+    return collections
 
-    return games, collections
+
+def _build_bundle(raw: Dict[str, Any]) -> tuple[List[Game], List[Collection]]:
+    """Migrate and materialize a library document into games + collections."""
+    raw = _migrate_library_document(raw)
+    games = [_deserialize_game(obj) for obj in raw.get("games", [])]
+    return games, _parse_collections(raw)
+
+
+def load_library_bundle(path: Path) -> tuple[List[Game], List[Collection]]:
+    """
+    Backward compatible:
+    - v1 had only games
+    - v2 has games + collections
+
+    Raises StorageError when stored copies exist but none are recoverable. Use
+    ``load_library_bundle_with_recovery`` to surface recovery to the user without
+    crashing.
+    """
+    raw = _read_with_recovery(path, validate=_is_library_payload)
+    if raw is None:
+        return [], []
+    return _build_bundle(raw)
+
+
+def load_library_bundle_with_recovery(
+    path: Path,
+) -> tuple[List[Game], List[Collection], RecoveryReport]:
+    """
+    Load the library like ``load_library_bundle`` but never crash on corruption.
+
+    On a fatal load (candidates exist but none are recoverable, or the newest
+    valid-shaped copy fails schema migration) the corrupt copies are quarantined
+    to ``.corrupt-*`` siblings and an empty library is returned with a fatal
+    report, so the application can start and explain what happened rather than
+    dying during construction. The report also flags ordinary recovery from a
+    backup/fallback copy so the user can be told their primary file was repaired.
+    """
+    raw, report = _recover(path, validate=_is_library_payload)
+    if report.fatal:
+        report = replace(report, quarantined=_quarantine_corrupt(report))
+        _log.error(
+            "library_unrecoverable %s",
+            kv(path=path, quarantined=[str(p) for p in report.quarantined]),
+        )
+        return [], [], report
+    if raw is None:
+        return [], [], report
+    try:
+        games, collections = _build_bundle(raw)
+    except StorageError as error:
+        # Valid-shaped but unmigratable (e.g. a future schema version): preserve
+        # the source copy and degrade to an empty library with a fatal report.
+        skipped = (report.source,) if report.source else ()
+        report = replace(report, fatal=True, recovered=False, source=None, skipped=skipped)
+        report = replace(report, quarantined=_quarantine_corrupt(report))
+        _log.error("library_unmigratable %s", kv(path=path, err=error))
+        return [], [], report
+    return games, collections, report

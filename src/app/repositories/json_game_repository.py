@@ -4,7 +4,11 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from app.models import Game, Collection
-from app.storage.json_store import load_library_bundle, save_library_bundle
+from app.storage.json_store import (
+    RecoveryReport,
+    load_library_bundle_with_recovery,
+    save_library_bundle,
+)
 from app.logging_utils import get_logger, kv
 
 from .game_repository import GameRepository
@@ -17,13 +21,23 @@ class JsonGameRepository(GameRepository):
 
     def __init__(self, library_path: Path) -> None:
         self._library_path = library_path
-        games, collections = load_library_bundle(library_path)
+        games, collections, report = load_library_bundle_with_recovery(library_path)
         self._games: List[Game] = games
         self._index: Dict[str, Game] = {g.game_id: g for g in games}
         self._collections: List[Collection] = collections
+        # Surfaced by the UI to explain corruption recovery to the user. A fatal
+        # report means the stored library could not be read and we started empty
+        # (the corrupt copies were quarantined first, so saving cannot destroy
+        # them); a recovered report means a backup/fallback copy was used.
+        self.recovery_report: RecoveryReport = report
         _log.info(
             "repo_loaded %s",
-            kv(games=len(games), collections=len(collections)),
+            kv(
+                games=len(games),
+                collections=len(collections),
+                recovered=report.recovered,
+                fatal=report.fatal,
+            ),
         )
 
     def get_all(self) -> List[Game]:
