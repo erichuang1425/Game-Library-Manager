@@ -67,3 +67,27 @@ jobs:
         run: |
           ruff format --check src/
         continue-on-error: true
+
+  windows-smoke:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pywin32
+
+      - name: Import app and exercise shortcut adapter boundary
+        env:
+          PYTHONPATH: src
+        run: |
+          python -c "import app; from app.services.shortcut_resolver import default_shell_link_adapter; print(type(default_shell_link_adapter()).__name__)"
+          python -m pytest src/tests/test_shortcut_resolver.py -v --tb=short
