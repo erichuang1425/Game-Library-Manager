@@ -30,12 +30,6 @@ class GameOpsMixin:
     def _remove_game_by_id(self: "MainWindow", game_id: str) -> None:
         """Remove a game from the repository."""
         self._repo.remove(game_id)
-        self._all_games = self._repo.get_all()
-
-    def _rebuild_game_index(self: "MainWindow") -> None:
-        """Sync _all_games list into the repository and rebuild index."""
-        self._repo.update_all(self._all_games)
-        self._games_by_id = self._repo.index
 
     def _fix_game(self: "MainWindow", game_id: str, issue_code: str) -> None:
         g = self._get_game(game_id)
