@@ -111,7 +111,9 @@ class CollectionMixin:
         if QMessageBox.question(self, "Delete Collection", f"Delete '{c.name}'?") != QMessageBox.Yes:
             return
 
-        self._collections = [x for x in self._collections if x.collection_id != c.collection_id]
+        self._repo.set_collections(
+            [x for x in self._collections if x.collection_id != c.collection_id]
+        )
         self._active_collection_id = None
         self._save_bundle()
 

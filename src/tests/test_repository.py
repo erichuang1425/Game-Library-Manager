@@ -75,3 +75,48 @@ class TestJsonGameRepository:
         coll = Collection(collection_id="c1", name="Favorites", game_ids=["1"])
         repo.set_collections([coll])
         assert len(repo.get_collections()) == 1
+
+    def test_upsert_inserts_new(self, repo):
+        repo.upsert(Game(game_id="9", title="New"))
+        assert repo.count == 4
+        assert repo.get_by_id("9").title == "New"
+
+    def test_upsert_replaces_existing(self, repo):
+        repo.upsert(Game(game_id="1", title="Renamed Alpha"))
+        assert repo.count == 3
+        assert repo.get_by_id("1").title == "Renamed Alpha"
+        # No duplicate id leaked into the list.
+        assert [g.game_id for g in repo.get_all()].count("1") == 1
+
+
+class TestMutationContract:
+    """The list/index/collections references must keep a stable identity so
+    aliases held by callers (e.g. MainWindow) never diverge from the repo."""
+
+    def test_get_all_identity_stable_across_mutations(self, repo):
+        games_ref = repo.get_all()
+        repo.add(Game(game_id="4", title="Delta"))
+        repo.upsert(Game(game_id="1", title="Renamed"))
+        repo.remove("2")
+        repo.update_all([Game(game_id="z", title="Z")])
+        # Same list object throughout; alias reflects every change.
+        assert repo.get_all() is games_ref
+        assert [g.game_id for g in games_ref] == ["z"]
+
+    def test_index_identity_stable_across_mutations(self, repo):
+        index_ref = repo.index
+        repo.update_all([Game(game_id="z", title="Z")])
+        assert repo.index is index_ref
+        assert "z" in index_ref and "1" not in index_ref
+
+    def test_collections_identity_stable(self, repo):
+        cols_ref = repo.get_collections()
+        repo.set_collections([Collection(collection_id="c1", name="Fav")])
+        assert repo.get_collections() is cols_ref
+        assert [c.collection_id for c in cols_ref] == ["c1"]
+
+    def test_remove_keeps_index_consistent(self, repo):
+        repo.remove("1")
+        assert "1" not in repo.index
+        assert repo.get_by_id("1") is None
+        assert len(repo.get_all()) == len(repo.index)
