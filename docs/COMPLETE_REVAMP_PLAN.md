@@ -589,7 +589,7 @@ Targets must be validated on agreed reference hardware and adjusted once, during
 **Deliverables**
 
 - ✅ Atomic JSON writes, known-good backups, newest-valid recovery across primary/backup/fallback copies, and full datetime handling.
-- 🟡 Explicit JSON schema migration registry is implemented for library v1 → v2 with historical-fixture round-trip coverage; corruption recovery UX remains.
+- ✅ Explicit JSON schema migration registry is implemented for library v1 → v2 with historical-fixture round-trip coverage. Corruption recovery UX is implemented: a load that recovers from a backup/fallback copy, or that cannot read any stored copy, is reported to the user via `RecoveryReport`; unrecoverable copies are quarantined to `.corrupt-*` siblings and the app starts with an empty library instead of crashing, surfacing a notice through `MainWindow`.
 - Blocking Ruff checks; introduce type checking for new core packages.
 - Windows CI lane for platform integration tests.
 - ✅ Dead persistence APIs have been removed and the repository mutation contract is now explicit: `get_all()`, `index`, and `get_collections()` return stable-identity live references, all structural changes go through repository methods (`add`/`upsert`/`remove`/`update_all`/`set_collections`), and `MainWindow` exposes them as read-only properties so the window and repository can no longer diverge or silently bypass persistence.

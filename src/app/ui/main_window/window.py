@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
-    QPushButton, QSplitter, QMenu, QToolButton, QApplication, QFrame,
+    QPushButton, QSplitter, QMenu, QToolButton, QApplication, QFrame, QMessageBox,
 )
 
 from app.models import Game, Collection
@@ -754,6 +754,48 @@ class MainWindow(
                total_ms=round((time.perf_counter() - self._t0) * 1000, 1),
                games=len(self._all_games))
         )
+
+        # Tell the user if the library was recovered from a backup, or could not
+        # be read at all. Deferred so the dialog appears over the shown window.
+        if self._repo.recovery_report.needs_notice:
+            QTimer.singleShot(0, self._surface_recovery_notice)
+
+    def _surface_recovery_notice(self) -> None:
+        """Explain corruption recovery to the user (recovered backup / unreadable library)."""
+        report = self._repo.recovery_report
+        if report.fatal:
+            detail = (
+                "Your library file could not be read and may be corrupt, so the "
+                "application started with an empty library."
+            )
+            if report.quarantined:
+                saved = "\n".join(str(p) for p in report.quarantined)
+                detail += (
+                    "\n\nA copy of the unreadable data has been preserved so you "
+                    f"can attempt manual recovery:\n{saved}"
+                )
+            else:
+                detail += f"\n\nAffected file:\n{report.path}"
+            icon = QMessageBox.Critical
+            title = "Library could not be read"
+        elif report.recovered:
+            detail = (
+                "Your primary library file was missing or unreadable, so it was "
+                f"restored from the most recent good copy:\n{report.source}\n\n"
+                "Your library has been recovered and will be re-saved normally."
+            )
+            icon = QMessageBox.Warning
+            title = "Library recovered"
+        else:
+            return
+        self._log.warning(
+            "recovery_notice %s",
+            kv(fatal=report.fatal, recovered=report.recovered, source=str(report.source)),
+        )
+        box = QMessageBox(icon, title, detail, QMessageBox.Ok, self)
+        box.setWindowModality(Qt.NonModal)
+        box.setAttribute(Qt.WA_DeleteOnClose)
+        box.show()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
