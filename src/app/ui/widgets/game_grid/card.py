@@ -193,16 +193,21 @@ class GameCard(QFrame):
         self._status_bar.setFlat(True)
         self._status_bar.setCursor(Qt.PointingHandCursor)
         self._status_bar.setFixedHeight(6)  # Slightly taller for better clickability
-        self._status_bar.setStyleSheet(
-            f"QPushButton {{ background: {sc.name()}; border: none; "
-            f"border-radius: 0px; }}"
-            f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
-        )
+        self._status_bar.setStyleSheet(self._status_bar_style(sc))
         self._status_bar.setToolTip(f"{status_label(game.status)} (click to cycle status)")
         self._status_bar.clicked.connect(self._on_status_clicked)
         icon_container.addWidget(self._status_bar)
 
         layout.addLayout(icon_container)
+
+    @staticmethod
+    def _status_bar_style(sc: QColor) -> str:
+        """Stylesheet for the bottom status strip — a rounded, accent-colored pill."""
+        return (
+            f"QPushButton {{ background: {sc.name()}; border: none; "
+            f"border-radius: 3px; }}"
+            f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
+        )
 
     def _build_info_section(self, layout: QVBoxLayout, theme, view_mode: str, game: Game) -> None:
         """Build the always-visible info section: title, rating + time, tags."""
@@ -272,14 +277,18 @@ class GameCard(QFrame):
                 tag_row.setContentsMargins(0, 4, 0, 0)
                 tag_row.setSpacing(4)
                 max_tags = 2 if self.chip_level == "narrow" else 3
+                acc = theme.accent
+                acc_rgb = f"{acc.red()},{acc.green()},{acc.blue()}"
                 for t in tags[:max_tags]:
                     tag_lbl = QLabel(t)
+                    # Soft accent-tinted pill — branded and legible across themes.
                     tag_lbl.setStyleSheet(
                         f"font-size: {int(10 * scale)}px; "
-                        f"color: {theme.text_muted.name()}; "
-                        f"background: {theme.chip_bg.name(QColor.HexArgb)}; "
-                        f"border-radius: {theme.radius_sm - 2}px; "
-                        f"padding: 2px 8px; border: none;"
+                        f"color: {theme.text.name()}; "
+                        f"background: rgba({acc_rgb},28); "
+                        f"border-radius: {theme.radius_sm - 1}px; "
+                        f"padding: 2px 8px; "
+                        f"border: 1px solid rgba({acc_rgb},55);"
                     )
                     tag_lbl.setMaximumWidth(120)
                     tag_row.addWidget(tag_lbl)
@@ -405,11 +414,7 @@ class GameCard(QFrame):
         self.game.status = next_status
         theme = self._theme
         sc = status_color(theme, next_status)
-        self._status_bar.setStyleSheet(
-            f"QPushButton {{ background: {sc.name()}; border: none; "
-            f"border-radius: 0px; }}"
-            f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
-        )
+        self._status_bar.setStyleSheet(self._status_bar_style(sc))
         self._status_bar.setToolTip(f"{status_label(next_status)} (click to cycle status)")
 
     def mousePressEvent(self, event) -> None:
@@ -538,11 +543,7 @@ class GameCard(QFrame):
             # Update status bar
             theme = self._theme
             sc = status_color(theme, new_status)
-            self._status_bar.setStyleSheet(
-                f"QPushButton {{ background: {sc.name()}; border: none; "
-                f"border-radius: 0px; }}"
-                f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
-            )
+            self._status_bar.setStyleSheet(self._status_bar_style(sc))
             self._status_bar.setToolTip(f"{status_label(new_status)} (click to cycle status)")
         elif chosen == a_rate_clear:
             self.rating_changed.emit(self.game.game_id, None)
@@ -642,10 +643,13 @@ class GameCard(QFrame):
         """Update the checkbox appearance based on selection state."""
         theme = self._theme
         if self._selected:
+            # Contrast the check glyph against the accent fill so it stays
+            # legible on light accents (e.g. High Contrast cyan/yellow).
+            check_fg = theme.bg if theme.accent.value() > 140 else QColor(255, 255, 255)
             self._select_checkbox.setText("☑")
             self._select_checkbox.setStyleSheet(
                 f"background: {theme.accent.name()}; "
-                f"color: white; "
+                f"color: {check_fg.name()}; "
                 f"border-radius: 4px; "
                 f"font-size: 14px; "
                 f"font-weight: bold;"
