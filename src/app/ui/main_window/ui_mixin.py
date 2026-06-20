@@ -358,25 +358,67 @@ class UIMixin:
     # ---------- startup overlay ----------
     def _build_startup_overlay(self: "MainWindow", host) -> None:
         try:
+            from app.ui.theme import current_theme
+            from PySide6.QtGui import QColor
+
+            theme = current_theme()
+            bg = theme.bg
             overlay = QFrame(host)
-            overlay.setStyleSheet("background: rgba(10,10,14,180); border-radius: 10px;")
+            # Theme-aware scrim so the splash reads correctly on light themes too.
+            overlay.setStyleSheet(
+                f"background: rgba({bg.red()},{bg.green()},{bg.blue()},190);"
+            )
             overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             overlay.hide()
-            layout = QVBoxLayout(overlay)
-            layout.setContentsMargins(20, 20, 20, 20)
+
+            scrim_layout = QVBoxLayout(overlay)
+            scrim_layout.setContentsMargins(20, 20, 20, 20)
+            scrim_layout.addStretch(2)
+
+            # Centered card so the splash feels intentional, not a flat wash.
+            card = QFrame()
+            card.setObjectName("startupCard")
+            card.setMaximumWidth(360)
+            card.setStyleSheet(
+                f"#startupCard {{ background: {theme.surface.name(QColor.HexArgb)}; "
+                f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+                f"border-radius: {theme.radius_lg}px; }} "
+                f"#startupCard QLabel {{ background: transparent; border: none; }}"
+            )
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(28, 28, 28, 28)
             layout.setSpacing(12)
+
+            from app.ui.icons import AppIcons
+
+            brand = QLabel(AppIcons.NAV_LIBRARY)
+            brand.setStyleSheet(
+                f"color: {theme.accent.name()}; font-size: 40px;"
+            )
             title = QLabel("Game Library Manager")
-            title.setStyleSheet("color: white; font-size: 18px; font-weight: 700;")
+            title.setStyleSheet(
+                f"color: {theme.text.name()}; font-size: 18px; font-weight: 700;"
+            )
             status = QLabel("Starting\u2026")
-            status.setStyleSheet("color: #dce7ff; font-size: 12px;")
+            status.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 12px;")
             bar = QProgressBar()
             bar.setRange(0, 0)
             bar.setTextVisible(False)
-            layout.addStretch(1)
+            bar.setFixedHeight(4)
+            bar.setStyleSheet(
+                f"QProgressBar {{ background: {theme.surface_sunken.name(QColor.HexArgb)}; "
+                f"border: none; border-radius: 2px; }} "
+                f"QProgressBar::chunk {{ background: {theme.accent.name()}; "
+                f"border-radius: 2px; }}"
+            )
+            layout.addWidget(brand, 0, Qt.AlignCenter)
             layout.addWidget(title, 0, Qt.AlignCenter)
             layout.addWidget(status, 0, Qt.AlignCenter)
+            layout.addSpacing(4)
             layout.addWidget(bar)
-            layout.addStretch(2)
+
+            scrim_layout.addWidget(card, 0, Qt.AlignCenter)
+            scrim_layout.addStretch(3)
             self._startup_overlay = overlay
             self._startup_status = status
             overlay.show()
