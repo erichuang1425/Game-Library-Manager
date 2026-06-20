@@ -868,16 +868,27 @@ class GameGrid(QWidget):
         layout.setSpacing(12)
         layout.addStretch(2)
 
-        # Large icon
+        # Large icon inside a soft accent-tinted circular badge for a more
+        # intentional, branded empty state (rather than a flat muted glyph).
+        badge = QFrame()
+        badge.setFixedSize(132, 132)
+        badge.setStyleSheet(
+            f"QFrame {{ background: rgba({theme.accent.red()},{theme.accent.green()},"
+            f"{theme.accent.blue()},28); border: 1px solid rgba({theme.accent.red()},"
+            f"{theme.accent.green()},{theme.accent.blue()},60); border-radius: 66px; }}"
+        )
+        badge_layout = QVBoxLayout(badge)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
         icon_label = QLabel(AppIcons.NAV_LIBRARY)
         icon_label.setAlignment(Qt.AlignCenter)
         icon_label.setStyleSheet(
-            f"font-size: 72px; color: {theme.text_muted.name()}; "
+            f"font-size: 64px; color: {theme.accent.name()}; "
             f"background: transparent; border: none;"
         )
-        layout.addWidget(icon_label)
+        badge_layout.addWidget(icon_label)
+        layout.addWidget(badge, 0, Qt.AlignHCenter)
 
-        layout.addSpacing(8)
+        layout.addSpacing(20)
 
         # Title
         title = QLabel("Your library is empty")
