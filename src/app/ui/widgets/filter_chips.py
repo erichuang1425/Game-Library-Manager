@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor
 
 from app.ui.theme import current_theme, filter_chip_style, is_reduced_motion
+from app.ui.icons import AppIcons
 
 
 @dataclass
@@ -31,11 +32,16 @@ class FilterChipWidget(QPushButton):
         self._chip = chip
         theme = current_theme()
 
-        # Style as active chip with close indicator
-        self.setText(f"{chip.label} \u00d7")
+        # Style as active chip with a trailing close glyph. A hair space sits
+        # before the \u00d7 so the remove affordance reads as a distinct target
+        # rather than crowding the label text.
+        self.setText(f"{chip.label}\u2002{AppIcons.ACT_CLOSE}")
         self.setStyleSheet(
             f"QPushButton {{ {filter_chip_style(theme, active=True)} }} "
-            f"QPushButton:hover {{ background: {theme.accent.lighter(115).name()}; }}"
+            f"QPushButton:hover {{ "
+            f"background: {theme.accent.lighter(115).name()}; "
+            f"border-color: {theme.accent.lighter(120).name()}; }} "
+            f"QPushButton:pressed {{ background: {theme.accent.darker(108).name()}; }}"
         )
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"Click to remove filter: {chip.label}")
@@ -68,14 +74,21 @@ class FilterChipsBar(QWidget):
         super().__init__(parent)
         self._chips: Dict[str, FilterChipWidget] = {}
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(8)
-
-        # Label
-        self._label = QLabel("Filters:")
         theme = current_theme()
-        self._label.setStyleSheet(f"color: {theme.text_muted.name()}; font-size: 12px;")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, theme.spacing_xs, 0, theme.spacing_xs)
+        layout.setSpacing(theme.spacing_sm)
+
+        # Leading label, styled as a small branded section marker (tag glyph +
+        # uppercase, letter-spaced text) so the bar announces itself the same way
+        # the sidebar section headers do.
+        self._label = QLabel(f"{AppIcons.UI_TAG}  FILTERS")
+        self._label.setStyleSheet(
+            f"color: {theme.text_muted.name()}; "
+            f"font-size: 11px; font-weight: 700; letter-spacing: 1px; "
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(self._label)
 
         # Scroll area for chips (in case there are many)
@@ -96,18 +109,26 @@ class FilterChipsBar(QWidget):
         self._scroll.setWidget(self._chips_container)
         layout.addWidget(self._scroll, 1)
 
-        # Clear all button
-        self._clear_btn = QPushButton("Clear all")
+        # Clear all button — a subtle outlined pill with a leading close glyph so
+        # the reset action reads as a deliberate control, not a stray text link.
+        ac = theme.accent
+        accent_rgb = f"{ac.red()},{ac.green()},{ac.blue()}"
+        self._clear_btn = QPushButton(f"{AppIcons.ACT_CLOSE}  Clear all")
         self._clear_btn.setStyleSheet(
             f"QPushButton {{ "
-            f"color: {theme.accent.name()}; "
+            f"color: {theme.text_muted.name()}; "
             f"background: transparent; "
-            f"border: none; "
+            f"border: 1px solid {theme.chip_border.name(QColor.HexArgb)}; "
+            f"border-radius: {theme.radius_pill}px; "
             f"font-size: 12px; "
             f"font-weight: 500; "
-            f"padding: 4px 8px; "
+            f"padding: 4px 12px; "
             f"}} "
-            f"QPushButton:hover {{ text-decoration: underline; }}"
+            f"QPushButton:hover {{ "
+            f"color: {ac.name()}; "
+            f"border-color: {ac.name()}; "
+            f"background: rgba({accent_rgb},22); }} "
+            f"QPushButton:pressed {{ background: rgba({accent_rgb},44); }}"
         )
         self._clear_btn.setCursor(Qt.PointingHandCursor)
         self._clear_btn.clicked.connect(self.clear_all_clicked.emit)
