@@ -4,14 +4,15 @@ from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 import re
 
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent
 from PySide6.QtWidgets import (
     QWidget, QLineEdit, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFrame
 )
-from PySide6.QtGui import QColor, QKeyEvent
+from PySide6.QtGui import QColor
 
 from app.ui.theme import current_theme
+from app.ui.icons import AppIcons
 
 
 @dataclass
@@ -269,15 +270,55 @@ class EnhancedSearchBar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # Unified search field: a bordered container holding a leading magnifier
+        # glyph and a borderless input, so the whole control reads as one element
+        # and can light up its border with the accent color on focus.
+        self._field = QFrame()
+        self._field.setObjectName("searchField")
+        field_layout = QHBoxLayout(self._field)
+        field_layout.setContentsMargins(theme.spacing_md, 0, theme.spacing_sm, 0)
+        field_layout.setSpacing(theme.spacing_sm - 2)
+
+        self._icon = QLabel(AppIcons.ACT_SEARCH)
+        self._icon.setStyleSheet(
+            f"color: {theme.text_muted.name()}; "
+            f"background: transparent; border: none; font-size: 13px;"
+        )
+        field_layout.addWidget(self._icon)
+
         self._input = QLineEdit()
         self._input.setPlaceholderText("Search... (try status:playing or tag:rpg)")
+        self._input.setStyleSheet(
+            "QLineEdit { background: transparent; border: none; padding: 7px 0; }"
+        )
         self._input.textChanged.connect(self._on_text_changed)
         self._input.returnPressed.connect(self._on_return_pressed)
-        layout.addWidget(self._input)
+        self._input.installEventFilter(self)
+        field_layout.addWidget(self._input, 1)
+
+        layout.addWidget(self._field)
+        self._apply_field_style(focused=False)
 
         # Suggestion popup
         self._popup = SearchSuggestionPopup(self)
         self._popup.suggestion_selected.connect(self._on_suggestion_selected)
+
+    def _apply_field_style(self, focused: bool) -> None:
+        """Paint the search field container, accenting its border on focus."""
+        theme = current_theme()
+        border = theme.focus if focused else theme.outline
+        bg = theme.surface if focused else theme.surface_alt
+        self._field.setStyleSheet(
+            f"QFrame#searchField {{ "
+            f"background: {bg.name(QColor.HexArgb)}; "
+            f"border: 1px solid {border.name(QColor.HexArgb)}; "
+            f"border-radius: {theme.radius_md}px; "
+            f"}}"
+        )
+        self._icon.setStyleSheet(
+            f"color: {(theme.accent if focused else theme.text_muted).name()}; "
+            f"background: transparent; border: none; font-size: 13px;"
+        )
 
     def text(self) -> str:
         """Get current search text."""
@@ -304,11 +345,11 @@ class EnhancedSearchBar(QWidget):
         return self._recent.save()
 
     def show_suggestions(self) -> None:
-        """Show the suggestions popup."""
+        """Show the suggestions popup anchored under the search field."""
         self._popup.update_recent(self._recent.get_all())
-        pos = self.mapToGlobal(self._input.geometry().bottomLeft())
-        self._popup.move(pos)
-        self._popup.setMinimumWidth(self._input.width())
+        pos = self._field.mapToGlobal(self._field.rect().bottomLeft())
+        self._popup.move(pos.x(), pos.y() + 4)
+        self._popup.setMinimumWidth(self._field.width())
         self._popup.show()
 
     def _on_text_changed(self, text: str) -> None:
@@ -339,17 +380,26 @@ class EnhancedSearchBar(QWidget):
             self._input.setText(text)
         self._input.setFocus()
 
-    def focusInEvent(self, event) -> None:
-        """Show suggestions on focus."""
-        super().focusInEvent(event)
-        if not self._input.text():
-            self.show_suggestions()
+    def eventFilter(self, obj, event) -> bool:
+        """Track focus/keys on the nested input to drive field styling and popup.
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Handle keyboard shortcuts."""
-        if event.key() == Qt.Key_Escape:
-            self._popup.hide()
-        elif event.key() == Qt.Key_Down and not self._popup.isVisible():
-            self.show_suggestions()
-        else:
-            super().keyPressEvent(event)
+        Focus lands on the child line edit rather than this widget, so we watch
+        it here to highlight the field border and surface suggestions reliably.
+        """
+        if obj is self._input:
+            etype = event.type()
+            if etype == QEvent.FocusIn:
+                self._apply_field_style(focused=True)
+                if not self._input.text():
+                    self.show_suggestions()
+            elif etype == QEvent.FocusOut:
+                self._apply_field_style(focused=False)
+            elif etype == QEvent.KeyPress:
+                key = event.key()
+                if key == Qt.Key_Escape and self._popup.isVisible():
+                    self._popup.hide()
+                    return True
+                if key == Qt.Key_Down and not self._popup.isVisible():
+                    self.show_suggestions()
+                    return True
+        return super().eventFilter(obj, event)
