@@ -4,11 +4,13 @@ from typing import Optional, List
 
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton, QMenu, QGraphicsOpacityEffect
+    QWidget, QHBoxLayout, QLabel, QPushButton, QMenu, QGraphicsOpacityEffect,
+    QFrame,
 )
 from PySide6.QtGui import QColor
 
-from app.ui.theme import current_theme
+from app.ui.theme import current_theme, ghost_btn_style
+from app.ui.icons import AppIcons
 
 
 class BatchToolbar(QWidget):
@@ -29,111 +31,126 @@ class BatchToolbar(QWidget):
         self._selected_ids: List[str] = []
 
         theme = current_theme()
+        self._theme = theme
+        ac = theme.accent
+        self._accent_hex = ac.name()
+        accent_rgb = f"{ac.red()},{ac.green()},{ac.blue()}"
 
-        # Toolbar styling
+        # Toolbar styling — a raised, accent-bordered floating surface so the
+        # batch bar reads as a distinct, temporary mode over the grid.
         self.setStyleSheet(
-            f"QWidget {{ "
+            f"QWidget#batchToolbar {{ "
             f"background: {theme.surface.name(QColor.HexArgb)}; "
-            f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+            f"border: 1px solid rgba({accent_rgb},90); "
             f"border-radius: {theme.radius_lg}px; "
             f"}} "
         )
+        self.setObjectName("batchToolbar")
         self.setMinimumHeight(50)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(12)
-
-        # Selection count label
-        self._count_label = QLabel("0 selected")
-        self._count_label.setStyleSheet(
-            f"color: {theme.text.name()}; "
-            f"font-size: 13px; "
-            f"font-weight: 600; "
-            f"background: transparent; "
-            f"border: none;"
+        layout.setContentsMargins(
+            theme.spacing_md, theme.spacing_sm, theme.spacing_md, theme.spacing_sm
         )
+        layout.setSpacing(theme.spacing_sm)
+
+        # Selection count label — the number is emphasized in the accent color so
+        # the current selection size is the first thing the eye lands on.
+        self._count_label = QLabel()
+        self._count_label.setTextFormat(Qt.RichText)
+        self._count_label.setStyleSheet(
+            f"color: {theme.text_muted.name()}; "
+            f"font-size: 13px; font-weight: 600; "
+            f"background: transparent; border: none;"
+        )
+        self._render_count()
         layout.addWidget(self._count_label)
 
-        layout.addSpacing(8)
+        layout.addWidget(self._make_divider())
 
-        # Action buttons
-        btn_style = (
+        # Action buttons — a clean neutral control that lifts to an accent
+        # outline/tint on hover, matching the chip treatment used elsewhere.
+        action_style = (
             f"QPushButton {{ "
             f"background: {theme.chip_bg.name(QColor.HexArgb)}; "
             f"color: {theme.text.name()}; "
             f"border: 1px solid {theme.chip_border.name(QColor.HexArgb)}; "
-            f"border-radius: {theme.radius_sm}px; "
-            f"padding: 8px 12px; "
-            f"font-size: 12px; "
+            f"border-radius: {theme.radius_md}px; "
+            f"padding: 7px 14px; "
+            f"font-size: 12px; font-weight: 500; "
             f"}} "
+            f"QPushButton::menu-indicator {{ width: 0px; }} "
             f"QPushButton:hover {{ "
-            f"background: {theme.chip_bg.lighter(110).name(QColor.HexArgb)}; "
-            f"border-color: {theme.focus.name(QColor.HexArgb)}; "
-            f"}} "
-            f"QPushButton:pressed {{ "
-            f"background: {theme.chip_bg.darker(105).name(QColor.HexArgb)}; "
-            f"}}"
+            f"background: rgba({accent_rgb},22); "
+            f"border-color: {ac.name()}; }} "
+            f"QPushButton:pressed {{ background: rgba({accent_rgb},42); }} "
+            f"QPushButton:disabled {{ "
+            f"color: {theme.text_muted.name()}; "
+            f"background: transparent; "
+            f"border-color: {theme.outline.name(QColor.HexArgb)}; }}"
         )
 
-        # Set Status button with dropdown
-        self._status_btn = QPushButton("Set Status")
-        self._status_btn.setStyleSheet(btn_style)
+        # Set Status button with dropdown (own chevron glyph; native indicator hidden)
+        status_label = f"{AppIcons.STS_PLAYING}  Set Status  {AppIcons.UI_CHEVRON_DOWN}"
+        self._status_btn = QPushButton(status_label)
+        self._status_btn.setStyleSheet(action_style)
         self._status_btn.setCursor(Qt.PointingHandCursor)
         status_menu = QMenu(self)
         for status in ["backlog", "playing", "finished", "dropped"]:
-            action = status_menu.addAction(status.capitalize())
+            label = f"{AppIcons.status_icon(status)}  {status.capitalize()}"
+            action = status_menu.addAction(label)
             action.triggered.connect(lambda checked, s=status: self._emit_status(s))
         self._status_btn.setMenu(status_menu)
         layout.addWidget(self._status_btn)
 
         # Add Tag button
-        self._tag_btn = QPushButton("Add Tag")
-        self._tag_btn.setStyleSheet(btn_style)
+        self._tag_btn = QPushButton(f"{AppIcons.UI_TAG}  Add Tag")
+        self._tag_btn.setStyleSheet(action_style)
         self._tag_btn.setCursor(Qt.PointingHandCursor)
         self._tag_btn.clicked.connect(self._on_add_tag)
         layout.addWidget(self._tag_btn)
 
         # Add to Collection button
-        self._collection_btn = QPushButton("Add to Collection")
-        self._collection_btn.setStyleSheet(btn_style)
+        self._collection_btn = QPushButton(
+            f"{AppIcons.NAV_COLLECTION}  Add to Collection"
+        )
+        self._collection_btn.setStyleSheet(action_style)
         self._collection_btn.setCursor(Qt.PointingHandCursor)
         self._collection_btn.clicked.connect(lambda: self.add_to_collection_requested.emit(self._selected_ids))
         layout.addWidget(self._collection_btn)
 
         layout.addStretch(1)
 
-        # Select All / Clear buttons
+        # Select All / Clear — subtle ghost controls; selection plumbing, not
+        # primary actions, so they recede until hovered.
         self._select_all_btn = QPushButton("Select All")
-        self._select_all_btn.setStyleSheet(btn_style)
+        self._select_all_btn.setStyleSheet(ghost_btn_style(theme))
         self._select_all_btn.setCursor(Qt.PointingHandCursor)
         self._select_all_btn.clicked.connect(self.select_all_clicked.emit)
         layout.addWidget(self._select_all_btn)
 
         self._clear_btn = QPushButton("Clear")
-        self._clear_btn.setStyleSheet(btn_style)
+        self._clear_btn.setStyleSheet(ghost_btn_style(theme))
         self._clear_btn.setCursor(Qt.PointingHandCursor)
         self._clear_btn.clicked.connect(self.clear_selection_clicked.emit)
         layout.addWidget(self._clear_btn)
 
-        layout.addSpacing(8)
+        layout.addWidget(self._make_divider())
 
-        # Exit button (styled as accent)
+        # Exit button — the primary, filled-accent pill that closes batch mode.
         exit_style = (
             f"QPushButton {{ "
-            f"background: {theme.accent.name()}; "
+            f"background: {ac.name()}; "
             f"color: {theme.bg.name()}; "
             f"border: none; "
-            f"border-radius: {theme.radius_sm}px; "
-            f"padding: 8px 16px; "
-            f"font-size: 12px; "
-            f"font-weight: 600; "
+            f"border-radius: {theme.radius_pill}px; "
+            f"padding: 7px 18px; "
+            f"font-size: 12px; font-weight: 600; "
             f"}} "
-            f"QPushButton:hover {{ "
-            f"background: {theme.accent.lighter(110).name()}; "
-            f"}}"
+            f"QPushButton:hover {{ background: {ac.lighter(112).name()}; }} "
+            f"QPushButton:pressed {{ background: {ac.darker(110).name()}; }}"
         )
-        self._exit_btn = QPushButton("Done")
+        self._exit_btn = QPushButton(f"{AppIcons.FB_SUCCESS}  Done")
         self._exit_btn.setStyleSheet(exit_style)
         self._exit_btn.setCursor(Qt.PointingHandCursor)
         self._exit_btn.clicked.connect(self.exit_mode_clicked.emit)
@@ -151,13 +168,33 @@ class BatchToolbar(QWidget):
         """Update the selection count and stored IDs."""
         self._selected_ids = game_ids
         self._selected_count = len(game_ids)
-        self._count_label.setText(f"{self._selected_count} selected")
+        self._render_count()
 
         # Enable/disable buttons based on selection
         has_selection = self._selected_count > 0
         self._status_btn.setEnabled(has_selection)
         self._tag_btn.setEnabled(has_selection)
         self._collection_btn.setEnabled(has_selection)
+
+    def _render_count(self) -> None:
+        """Render the selection count with the number emphasized in the accent."""
+        n = self._selected_count
+        noun = "game" if n == 1 else "games"
+        self._count_label.setText(
+            f"<span style='color:{self._accent_hex}; font-weight:700;'>{n}</span> "
+            f"{noun} selected"
+        )
+
+    def _make_divider(self) -> QFrame:
+        """A slim vertical rule separating logical button groups."""
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFixedWidth(1)
+        line.setFixedHeight(22)
+        line.setStyleSheet(
+            f"background: {self._theme.outline.name(QColor.HexArgb)}; border: none;"
+        )
+        return line
 
     def show_toolbar(self) -> None:
         """Show the toolbar with animation."""
