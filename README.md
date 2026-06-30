@@ -2,22 +2,22 @@
 
 A Windows desktop app for keeping a large shortcut-based game library tidy, searchable, and launch-ready.
 
-Game Library Manager is built for people who already have folders full of `.lnk`, `.url`, and `.html` launchers and want a cleaner way to browse them. It scans a shortcut root, keeps your edits in a local JSON library, tracks versions and source URLs, flags broken entries, and gives the collection a fast PySide6 interface instead of another spreadsheet.
+Game Library Manager is for collections that already live as Windows shortcuts, web launchers, and downloaded builds. Point it at a shortcut folder, scan once, then manage the library from a local PySide6 app instead of a spreadsheet.
 
-## At a Glance
+![Game Library Manager showing a sample library grid, collections sidebar, and details panel](screenshots/game-library-manager-main.png)
+
+_Screenshot uses sample data._
+
+## What It Handles
 
 | Area | What it does |
 | --- | --- |
-| Library | Responsive card grid, compact and comfortable densities, source/status filters, tags, sorting, collections, and launch stats. |
-| Scanning | Imports top-level Windows shortcuts and web launchers, resolves targets, detects duplicate shortcut groups, and preserves existing metadata while merging. |
-| Updates | Checks source pages in the background, parses known version patterns, caches requests, and separates update states from unknown or newer local versions. |
-| Maintenance | Health checks for missing shortcuts, targets, source URLs, archive paths, game folders, and version mismatches. |
-| Customization | Dark, light, neubrutalism, neumorphism, and glassmorphism themes with font and layout controls. |
-| Tools | Bundled shortcut scanner, bulk source URL import, archive import helpers, export/import, undo/redo, keyboard shortcuts, and layout customization. |
-
-## Screenshots
-
-The app is visual, but this repository does not currently include final screenshots. The `screenshots/` directory is reserved for public captures of the library grid, details panel, update view, and health checks.
+| Library | Card grid, list mode, tags, status filters, collections, ratings, notes, and launch counts. |
+| Scanning | Imports top-level `.lnk`, `.url`, and `.html` entries while preserving edits you already made. |
+| Updates | Checks source pages in the background and keeps update states separate from unknown results. |
+| Maintenance | Flags missing shortcuts, targets, source URLs, archive paths, game folders, and version mismatches. |
+| Customization | Themes, density options, font controls, focus mode, and saved layout preferences. |
+| Tools | Bundled shortcut scanner, bulk source URL import, archive import, export/import, undo/redo, and keyboard shortcuts. |
 
 ## Tech Stack
 
@@ -31,7 +31,7 @@ The app is visual, but this repository does not currently include final screensh
 
 ## Getting Started
 
-Game Library Manager is Windows-first. The UI can be imported on other platforms for tests, but shortcut resolution depends on Windows shell APIs.
+Game Library Manager is Windows-first. Tests can run elsewhere, but `.lnk` resolution uses Windows shell APIs.
 
 ```powershell
 git clone https://github.com/erichuang1425/Game-Library-Manager.git
@@ -43,7 +43,7 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-On first run:
+First run:
 
 1. Choose **Scan** and select the folder that contains your shortcuts.
 2. Review duplicate shortcut groups before importing.
@@ -51,7 +51,7 @@ On first run:
 4. Use **Check Updates** to refresh version status.
 5. Open **Health Checks** to fix missing paths or ignore known issues.
 
-Application data is stored under `%APPDATA%/GameLibraryManager`, including `library.json`, `settings.json`, and log output.
+The app stores `library.json`, `settings.json`, and logs under `%APPDATA%/GameLibraryManager`.
 
 ## Project Structure
 
@@ -87,7 +87,7 @@ python -c "import app; from app.services.shortcut_resolver import default_shell_
 
 ## Packaging
 
-The repository includes a PyInstaller build recipe in `packaging.md`.
+The PyInstaller build notes live in `packaging.md`.
 
 ```powershell
 pip install -r requirements.txt pyinstaller
@@ -98,7 +98,7 @@ The packaged executable is written to `dist/GameLibraryManager/GameLibraryManage
 
 ## Roadmap
 
-- Add polished public screenshots and short demo clips.
+- Add more public screenshots and short demo clips.
 - Improve source-page parsing for more site layouts while keeping unknown results explicit.
 - Expand archive import coverage and recovery flows.
 - Tighten accessibility around keyboard navigation, focus states, and dense grid browsing.
