@@ -66,6 +66,10 @@ class AppIcons:
     UI_ARROW_RIGHT = "\u2192"     # Right arrow
     UI_PAGES = "\u2630"           # Trigram / Pages mode
     UI_SCROLL = "\u2195"          # Up-down arrow / Scroll mode
+    UI_VIEW = "\u25a6"            # Square with grid / View options
+    UI_FOCUS = "\u26f6"           # Square four corners / Focus (full-width) mode
+    UI_DETAILS = "\u25e8"         # Square right-half black / Details side panel
+    UI_SELECT = "\u2611"          # Ballot box with check / Multi-select mode
 
     @staticmethod
     def status_icon(status: str) -> str:

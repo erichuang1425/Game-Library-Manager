@@ -9,6 +9,7 @@ from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
     QPushButton, QSplitter, QMenu, QToolButton, QApplication, QFrame, QMessageBox,
+    QWidgetAction,
 )
 
 from app.models import Game, Collection
@@ -25,7 +26,8 @@ from app.ui.widgets.library_sidebar import LibrarySidebar
 from app.ui.theme import (
     apply_theme, current_theme, header_bar_style, gradient_header_style,
     primary_btn_style, secondary_btn_style, ghost_btn_style,
-    scaled_toolbar_height,
+    toolbar_btn_style, segmented_btn_style, icon_btn_style, popover_frame_style,
+    section_header_style, scaled_toolbar_height,
 )
 from app.ui.icons import AppIcons
 
@@ -359,7 +361,7 @@ class MainWindow(
         content_layout.setSpacing(0)
         content.setMinimumWidth(480)
 
-        # -- Context toolbar --
+        # -- Single context toolbar (replaces the old two-row control area) --
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(0, theme.spacing_sm, 0, theme.spacing_sm)
         toolbar.setSpacing(theme.spacing_sm)
@@ -375,7 +377,7 @@ class MainWindow(
         self.check_updates_btn = QToolButton()
         self.check_updates_btn.setText(f"{AppIcons.NAV_UPDATES}  Updates")
         self.check_updates_btn.setPopupMode(QToolButton.MenuButtonPopup)
-        self.check_updates_btn.setStyleSheet(secondary_btn_style(theme))
+        self.check_updates_btn.setStyleSheet(toolbar_btn_style(theme))
         self.check_updates_btn.setCursor(Qt.PointingHandCursor)
         self.check_updates_btn.setToolTip("Check for game updates")
         self.check_updates_btn.clicked.connect(self._on_check_updates_fetch)
@@ -389,14 +391,9 @@ class MainWindow(
         self.check_updates_btn.setMenu(updates_menu)
         toolbar.addWidget(self.check_updates_btn)
 
-        # Separator
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.VLine)
-        sep1.setStyleSheet(f"color: {theme.outline.name(QColor.HexArgb)};")
-        sep1.setFixedWidth(1)
-        toolbar.addWidget(sep1)
+        toolbar.addWidget(self._toolbar_separator(theme))
 
-        # Quick filter pills
+        # Quick-filter segmented control (keeps the same pill widgets/handlers)
         self.pill_all = QPushButton("All")
         self.pill_all.setToolTip("Show all games")
         self.pill_missing = QPushButton("Missing")
@@ -405,139 +402,54 @@ class MainWindow(
         self.pill_updates.setToolTip("Games with available updates")
         self.pill_source = QPushButton("Source")
         self.pill_source.setToolTip("Games with a source URL")
-        for btn in (self.pill_all, self.pill_missing, self.pill_updates, self.pill_source):
+        seg = QHBoxLayout()
+        seg.setContentsMargins(0, 0, 0, 0)
+        seg.setSpacing(0)
+        pills = [self.pill_all, self.pill_missing, self.pill_updates, self.pill_source]
+        for i, btn in enumerate(pills):
+            pos = "left" if i == 0 else ("right" if i == len(pills) - 1 else "mid")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(segmented_btn_style(theme, pos))
             btn.clicked.connect(self._on_quick_filter)
-            toolbar.addWidget(btn)
+            seg.addWidget(btn)
+        toolbar.addLayout(seg)
 
         toolbar.addStretch(1)
 
-        # View controls (compact)
-        # Sort
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems(["Title", "Last Played", "Rating", "Launch Count", "Last Checked"])
-        self.sort_combo.setToolTip("Sort order")
-        self.sort_combo.setCurrentText({
-            "title": "Title",
-            "last_played": "Last Played",
-            "rating": "Rating",
-            "launch_count": "Launch Count",
-            "last_checked": "Last Checked"
-        }.get(self._sort_by, "Title"))
-        self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
-        self.sort_combo.setMaximumWidth(150)
-        toolbar.addWidget(self.sort_combo)
+        # Filter popover (hosts status / confidence / type filters + tag + clear)
+        self.filter_btn = self._build_filter_popover(theme)
+        toolbar.addWidget(self.filter_btn)
 
-        # View toggle
-        self.view_comfort = QPushButton("Grid")
-        self.view_comfort.setToolTip("Comfortable grid view")
-        self.view_compact = QPushButton("List")
-        self.view_compact.setToolTip("Compact list view")
-        for btn in (self.view_comfort, self.view_compact):
-            btn.setCheckable(True)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(self._on_view_mode_changed)
-        toolbar.addWidget(self.view_comfort)
-        toolbar.addWidget(self.view_compact)
+        # View popover (hosts sort + layout + browse mode)
+        self.view_btn = self._build_view_popover(theme)
+        toolbar.addWidget(self.view_btn)
 
-        # Browse mode toggle (Scroll vs Pages)
-        sep_browse = QFrame()
-        sep_browse.setFrameShape(QFrame.VLine)
-        sep_browse.setStyleSheet(f"color: {theme.outline.name(QColor.HexArgb)};")
-        sep_browse.setFixedWidth(1)
-        toolbar.addWidget(sep_browse)
+        toolbar.addWidget(self._toolbar_separator(theme))
 
-        self.browse_scroll_btn = QPushButton(f"{AppIcons.UI_SCROLL} Scroll")
-        self.browse_scroll_btn.setToolTip("Continuous scrolling mode (virtual scroll)")
-        self.browse_pages_btn = QPushButton(f"{AppIcons.UI_PAGES} Pages")
-        self.browse_pages_btn.setToolTip("Paginated browsing mode")
-        for btn in (self.browse_scroll_btn, self.browse_pages_btn):
-            btn.setCheckable(True)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(self._on_browse_mode_changed)
-        toolbar.addWidget(self.browse_scroll_btn)
-        toolbar.addWidget(self.browse_pages_btn)
-
-        content_layout.addLayout(toolbar)
-
-        # -- Secondary controls (hidden filters) --
-        filter_row = QHBoxLayout()
-        filter_row.setContentsMargins(0, 0, 0, theme.spacing_xs)
-        filter_row.setSpacing(theme.spacing_sm)
-
-        # Tag filter display
-        self.tag_filter_label = QLabel("")
-        self.tag_filter_label.setStyleSheet(
-            f"color: {theme.accent.name()}; font-weight: 600; "
-            f"background: transparent; border: none;"
-        )
-        self.tag_filter_label.hide()
-        self.clear_tag_btn = QPushButton(AppIcons.ACT_CLOSE)
-        self.clear_tag_btn.setStyleSheet(ghost_btn_style(theme))
-        self.clear_tag_btn.setFixedSize(24, 24)
-        self.clear_tag_btn.clicked.connect(self._clear_tag_filter)
-        self.clear_tag_btn.setVisible(False)
-        filter_row.addWidget(self.tag_filter_label)
-        filter_row.addWidget(self.clear_tag_btn)
-
-        # Dropdown filters (compact, no labels — the combo box items are self-explanatory)
-        self.status_filter = QComboBox()
-        self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
-        self.status_filter.setToolTip("Filter by status")
-        status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
-        self.status_filter.setCurrentText(status_label)
-        self.status_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.status_filter.setMaximumWidth(120)
-        filter_row.addWidget(self.status_filter)
-
-        self.conf_filter = QComboBox()
-        self.conf_filter.addItems(["All", "High", "Medium", "Low"])
-        self.conf_filter.setToolTip("Filter by confidence")
-        confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
-        self.conf_filter.setCurrentText(confidence_label)
-        self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.conf_filter.setMaximumWidth(110)
-        filter_row.addWidget(self.conf_filter)
-
-        self.type_filter = QComboBox()
-        self.type_filter.addItems(["All", "lnk", "url", "html"])
-        self.type_filter.setToolTip("Filter by type")
-        self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
-        self.type_filter.currentTextChanged.connect(self._on_filter_changed)
-        self.type_filter.setMaximumWidth(90)
-        filter_row.addWidget(self.type_filter)
-
-        filter_row.addStretch(1)
-
-        # Panel toggle buttons
-        self.focus_btn = QPushButton("Focus")
-        self.focus_btn.setToolTip("Full-width grid (hide sidebar and details)")
-        self.focus_btn.setCheckable(True)
-        self.focus_btn.setCursor(Qt.PointingHandCursor)
-        self.focus_btn.clicked.connect(self._toggle_focus_mode)
-        self.focus_btn.setChecked(self._focus_mode)
-        self.focus_btn.setStyleSheet(ghost_btn_style(theme))
-        filter_row.addWidget(self.focus_btn)
-
+        # Panel toggles — compact icon-only buttons
+        self.focus_btn = QPushButton(AppIcons.UI_FOCUS)
+        self.focus_btn.setToolTip("Focus mode — full-width grid (hide sidebar & details)")
         self.details_toggle = QToolButton()
-        self.details_toggle.setText("Details")
+        self.details_toggle.setText(AppIcons.UI_DETAILS)
         self.details_toggle.setToolTip("Show/hide details panel (Ctrl+D)")
-        self.details_toggle.setCheckable(True)
+        self.select_btn = QPushButton(AppIcons.UI_SELECT)
+        self.select_btn.setToolTip("Multi-select mode (Ctrl+Click)")
+        for tog in (self.focus_btn, self.details_toggle, self.select_btn):
+            tog.setCheckable(True)
+            tog.setCursor(Qt.PointingHandCursor)
+            tog.setFixedSize(30, 30)
+            tog.setStyleSheet(icon_btn_style(theme))
+        self.focus_btn.setChecked(self._focus_mode)
+        self.focus_btn.clicked.connect(self._toggle_focus_mode)
         self.details_toggle.setChecked(self._details_visible)
         self.details_toggle.clicked.connect(self._toggle_details_panel)
-        self.details_toggle.setStyleSheet(ghost_btn_style(theme))
-        filter_row.addWidget(self.details_toggle)
-
-        self.select_btn = QPushButton("Select")
-        self.select_btn.setToolTip("Multi-select mode (Ctrl+Click)")
-        self.select_btn.setCheckable(True)
-        self.select_btn.setCursor(Qt.PointingHandCursor)
         self.select_btn.clicked.connect(self._toggle_multi_select_mode)
-        self.select_btn.setStyleSheet(ghost_btn_style(theme))
-        filter_row.addWidget(self.select_btn)
+        toolbar.addWidget(self.focus_btn)
+        toolbar.addWidget(self.details_toggle)
+        toolbar.addWidget(self.select_btn)
 
-        content_layout.addLayout(filter_row)
+        content_layout.addLayout(toolbar)
 
         # Filter chips bar
         self.filter_chips = FilterChipsBar()
@@ -610,6 +522,186 @@ class MainWindow(
         self._rebuild_sidebar()
 
         return content
+
+    # ------------------------------------------------------------------ #
+    #  Toolbar popovers (Filter / View)
+    # ------------------------------------------------------------------ #
+
+    def _toolbar_separator(self, theme) -> QFrame:
+        """A 1px vertical divider for grouping toolbar controls."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFixedWidth(1)
+        sep.setStyleSheet(
+            f"background: {theme.outline.name(QColor.HexArgb)}; border: none; "
+            f"margin: 4px 2px;"
+        )
+        return sep
+
+    def _make_popover_button(self, label: str, tooltip: str, content: QWidget, theme) -> QToolButton:
+        """Wrap a content widget in an auto-closing popover anchored to a button."""
+        btn = QToolButton()
+        btn.setText(label)
+        btn.setToolTip(tooltip)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setPopupMode(QToolButton.InstantPopup)
+        btn.setStyleSheet(toolbar_btn_style(theme))
+        menu = QMenu(btn)
+        menu.setStyleSheet("QMenu { background: transparent; border: none; padding: 0; margin: 0; }")
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(content)
+        menu.addAction(action)
+        btn.setMenu(menu)
+        return btn
+
+    def _popover_container(self, theme):
+        """Return (frame, vbox) for a styled popover body."""
+        frame = QFrame()
+        frame.setObjectName("popover")
+        frame.setStyleSheet(popover_frame_style(theme))
+        col = QVBoxLayout(frame)
+        col.setContentsMargins(
+            theme.spacing_md, theme.spacing_md, theme.spacing_md, theme.spacing_md
+        )
+        col.setSpacing(theme.spacing_sm)
+        return frame, col
+
+    def _popover_label(self, text: str, theme) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(section_header_style(theme))
+        return lbl
+
+    def _build_filter_popover(self, theme) -> QToolButton:
+        """Filter popover hosting the status / confidence / type / tag filters.
+
+        The combo widgets keep their original attribute names so every handler
+        in filter_mixin continues to work unchanged.
+        """
+        frame, col = self._popover_container(theme)
+        frame.setMinimumWidth(240)
+
+        col.addWidget(self._popover_label("STATUS", theme))
+        self.status_filter = QComboBox()
+        self.status_filter.addItems(["All", "Backlog", "Playing", "Finished", "Dropped"])
+        self.status_filter.setToolTip("Filter by status")
+        status_label = self._status_filter.capitalize() if self._status_filter != "all" else "All"
+        self.status_filter.setCurrentText(status_label)
+        self.status_filter.currentTextChanged.connect(self._on_filter_changed)
+        col.addWidget(self.status_filter)
+
+        col.addWidget(self._popover_label("CONFIDENCE", theme))
+        self.conf_filter = QComboBox()
+        self.conf_filter.addItems(["All", "High", "Medium", "Low"])
+        self.conf_filter.setToolTip("Filter by confidence")
+        confidence_label = self._confidence_filter.capitalize() if self._confidence_filter != "all" else "All"
+        self.conf_filter.setCurrentText(confidence_label)
+        self.conf_filter.currentTextChanged.connect(self._on_filter_changed)
+        col.addWidget(self.conf_filter)
+
+        col.addWidget(self._popover_label("TYPE", theme))
+        self.type_filter = QComboBox()
+        self.type_filter.addItems(["All", "lnk", "url", "html"])
+        self.type_filter.setToolTip("Filter by type")
+        self.type_filter.setCurrentText(self._type_filter if self._type_filter != "all" else "All")
+        self.type_filter.currentTextChanged.connect(self._on_filter_changed)
+        col.addWidget(self.type_filter)
+
+        # Tag filter row (only visible while a tag filter is active)
+        tag_row = QHBoxLayout()
+        tag_row.setContentsMargins(0, 0, 0, 0)
+        self.tag_filter_label = QLabel("")
+        self.tag_filter_label.setStyleSheet(
+            f"color: {theme.accent.name()}; font-weight: 600; "
+            f"background: transparent; border: none;"
+        )
+        self.tag_filter_label.hide()
+        self.clear_tag_btn = QPushButton(AppIcons.ACT_CLOSE)
+        self.clear_tag_btn.setStyleSheet(ghost_btn_style(theme))
+        self.clear_tag_btn.setFixedSize(24, 24)
+        self.clear_tag_btn.clicked.connect(self._clear_tag_filter)
+        self.clear_tag_btn.setVisible(False)
+        tag_row.addWidget(self.tag_filter_label, 1)
+        tag_row.addWidget(self.clear_tag_btn)
+        col.addLayout(tag_row)
+
+        clear_all = QPushButton("Clear all filters")
+        clear_all.setStyleSheet(secondary_btn_style(theme))
+        clear_all.setCursor(Qt.PointingHandCursor)
+        clear_all.clicked.connect(self._clear_all_filters)
+        col.addWidget(clear_all)
+
+        return self._make_popover_button(
+            f"{AppIcons.ACT_FILTER}  Filter", "Filter games", frame, theme
+        )
+
+    def _build_view_popover(self, theme) -> QToolButton:
+        """View popover hosting sort + layout + browse-mode controls."""
+        frame, col = self._popover_container(theme)
+        frame.setMinimumWidth(220)
+
+        col.addWidget(self._popover_label("SORT BY", theme))
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(["Title", "Last Played", "Rating", "Launch Count", "Last Checked"])
+        self.sort_combo.setToolTip("Sort order")
+        self.sort_combo.setCurrentText({
+            "title": "Title", "last_played": "Last Played", "rating": "Rating",
+            "launch_count": "Launch Count", "last_checked": "Last Checked",
+        }.get(self._sort_by, "Title"))
+        self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
+        col.addWidget(self.sort_combo)
+
+        col.addWidget(self._popover_label("LAYOUT", theme))
+        self.view_comfort = QPushButton("Grid")
+        self.view_comfort.setToolTip("Comfortable grid view")
+        self.view_compact = QPushButton("List")
+        self.view_compact.setToolTip("Compact list view")
+        layout_row = QHBoxLayout()
+        layout_row.setContentsMargins(0, 0, 0, 0)
+        layout_row.setSpacing(0)
+        for i, btn in enumerate((self.view_comfort, self.view_compact)):
+            pos = "left" if i == 0 else "right"
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(segmented_btn_style(theme, pos))
+            btn.clicked.connect(self._on_view_mode_changed)
+            layout_row.addWidget(btn)
+        col.addLayout(layout_row)
+
+        col.addWidget(self._popover_label("BROWSE", theme))
+        self.browse_scroll_btn = QPushButton(f"{AppIcons.UI_SCROLL} Scroll")
+        self.browse_scroll_btn.setToolTip("Continuous scrolling mode (virtual scroll)")
+        self.browse_pages_btn = QPushButton(f"{AppIcons.UI_PAGES} Pages")
+        self.browse_pages_btn.setToolTip("Paginated browsing mode")
+        browse_row = QHBoxLayout()
+        browse_row.setContentsMargins(0, 0, 0, 0)
+        browse_row.setSpacing(0)
+        for i, btn in enumerate((self.browse_scroll_btn, self.browse_pages_btn)):
+            pos = "left" if i == 0 else "right"
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(segmented_btn_style(theme, pos))
+            btn.clicked.connect(self._on_browse_mode_changed)
+            browse_row.addWidget(btn)
+        col.addLayout(browse_row)
+
+        return self._make_popover_button(
+            f"{AppIcons.UI_VIEW}  View", "View options", frame, theme
+        )
+
+    def _update_filter_badge(self) -> None:
+        """Refresh the Filter button label with a count of active filters."""
+        if not hasattr(self, "filter_btn"):
+            return
+        count = sum((
+            self._status_filter != "all",
+            self._confidence_filter != "all",
+            self._type_filter != "all",
+            bool(self._tag_filter),
+        ))
+        label = f"{AppIcons.ACT_FILTER}  Filter"
+        if count:
+            label += f"  ({count})"
+        self.filter_btn.setText(label)
 
     def _apply_saved_widget_prefs(self) -> None:
         """Apply saved preferences to health and updates widgets."""

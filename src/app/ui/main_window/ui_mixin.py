@@ -310,21 +310,19 @@ class UIMixin:
             self._set_toolbar_compact(False)
 
     def _set_toolbar_compact(self: "MainWindow", compact: bool) -> None:
-        """Collapse toolbar buttons to icons-only in compact mode."""
+        """Collapse the primary toolbar buttons to icon-only in compact mode.
+
+        Secondary controls (sort, layout, browse, filters) now live inside the
+        Filter/View popovers, so only the always-visible primary actions need to
+        shrink at narrow widths.
+        """
         from app.ui.icons import AppIcons
         if compact:
             self.scan_btn.setText(AppIcons.ACT_SCAN)
             self.check_updates_btn.setText(AppIcons.NAV_UPDATES)
-            self.browse_scroll_btn.setText(AppIcons.UI_SCROLL)
-            self.browse_pages_btn.setText(AppIcons.UI_PAGES)
         else:
             self.scan_btn.setText(f"{AppIcons.ACT_SCAN}  Scan")
             self.check_updates_btn.setText(f"{AppIcons.NAV_UPDATES}  Updates")
-            self.browse_scroll_btn.setText(f"{AppIcons.UI_SCROLL} Scroll")
-            self.browse_pages_btn.setText(f"{AppIcons.UI_PAGES} Pages")
-        # Hide less-essential filters in compact mode
-        for widget in (self.conf_filter, self.type_filter):
-            widget.setVisible(not compact)
 
     def _bump_table_font(self: "MainWindow", table, base: int) -> None:
         f = table.font()

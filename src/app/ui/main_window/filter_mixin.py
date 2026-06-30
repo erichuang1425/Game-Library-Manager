@@ -105,6 +105,8 @@ class FilterMixin:
         else:
             self.tag_filter_label.hide()
             self.clear_tag_btn.setVisible(False)
+        if hasattr(self, "_update_filter_badge"):
+            self._update_filter_badge()
 
     def _apply_quick_filter_buttons(self: "MainWindow") -> None:
         mapping = {

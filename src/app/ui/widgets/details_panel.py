@@ -6,7 +6,7 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton,
-    QComboBox, QLineEdit, QTextEdit, QFileDialog, QScrollArea,
+    QLineEdit, QTextEdit, QFileDialog, QScrollArea,
     QFrame, QSizePolicy,
 )
 from PySide6.QtGui import QColor
@@ -18,7 +18,8 @@ from app.ui.theme import (
 )
 from app.ui.icons import AppIcons
 from app.ui.typography import get_scale, title_style, caption_style, label_style
-from app.ui.widgets.game_grid.display_utils import stars, relative_time
+from app.ui.widgets.game_grid.display_utils import relative_time
+from app.ui.widgets.controls import StarRating, StatusChips, TagEditor
 
 
 def _fmt_dt(dt: Optional[datetime]) -> str:
@@ -98,29 +99,22 @@ class DetailsPanel(QWidget):
         sr_container = QFrame()
         sr_container.setStyleSheet(
             f"QFrame {{ background: {theme.surface_alt.name(QColor.HexArgb)}; "
-            f"border-radius: {theme.radius_sm}px; border: none; "
-            f"padding: {theme.spacing_sm}px; }}"
+            f"border-radius: {theme.radius_sm}px; border: none; }}"
         )
-        sr_inner = QHBoxLayout(sr_container)
+        sr_inner = QVBoxLayout(sr_container)
         sr_inner.setContentsMargins(theme.spacing_sm, theme.spacing_sm, theme.spacing_sm, theme.spacing_sm)
         sr_inner.setSpacing(theme.spacing_sm)
 
-        self.status = QComboBox()
-        self.status.addItems(["backlog", "playing", "finished", "dropped"])
+        # Interactive status chips + star rating (replaces plain combo boxes)
+        self.status = StatusChips()
         self.status.setEnabled(False)
-        self.status.currentTextChanged.connect(self._on_changed)
-        self.status.setMinimumWidth(100)
-        sr_inner.addWidget(self.status, 1)
+        self.status.changed.connect(self._on_changed)
+        sr_inner.addWidget(self.status)
 
-        self.rating = QComboBox()
-        self.rating.addItem("\u2014  Unrated")
-        for i in range(1, 11):
-            star_text = stars(i)
-            self.rating.addItem(f"{star_text}  {i}/10")
+        self.rating = StarRating()
         self.rating.setEnabled(False)
-        self.rating.currentIndexChanged.connect(self._on_changed)
-        self.rating.setMinimumWidth(120)
-        sr_inner.addWidget(self.rating, 1)
+        self.rating.changed.connect(self._on_changed)
+        sr_inner.addWidget(self.rating)
 
         layout.addWidget(sr_container)
 
@@ -128,10 +122,9 @@ class DetailsPanel(QWidget):
         layout.addSpacing(theme.spacing_md)
         layout.addWidget(self._section_divider(theme))
         layout.addWidget(self._section_header("TAGS", theme))
-        self.tags = QLineEdit()
-        self.tags.setPlaceholderText("Tags (comma separated)")
+        self.tags = TagEditor()
         self.tags.setEnabled(False)
-        self.tags.textChanged.connect(self._on_changed)
+        self.tags.changed.connect(self._on_changed)
         layout.addWidget(self.tags)
 
         # == Section: Notes ==
@@ -366,13 +359,13 @@ class DetailsPanel(QWidget):
         self.play_btn.setEnabled(True)
 
         self.status.setEnabled(True)
-        self.status.setCurrentText(game.status)
+        self.status.set_status(game.status)
 
         self.rating.setEnabled(True)
-        self.rating.setCurrentIndex(0 if game.rating is None else game.rating)
+        self.rating.set_rating(game.rating)
 
         self.tags.setEnabled(True)
-        self.tags.setText(", ".join(game.tags))
+        self.tags.set_tags(game.tags)
 
         self.notes.setEnabled(True)
         self.notes.setPlainText(game.notes)
@@ -410,10 +403,9 @@ class DetailsPanel(QWidget):
     def apply_edits_to_game(self) -> None:
         if self._game is None:
             return
-        self._game.status = self.status.currentText()
-        self._game.rating = None if self.rating.currentIndex() == 0 else self.rating.currentIndex()
-        raw = self.tags.text().strip()
-        self._game.tags = [t.strip() for t in raw.split(",") if t.strip()] if raw else []
+        self._game.status = self.status.status()
+        self._game.rating = self.rating.rating()
+        self._game.tags = self.tags.tags()
         self._game.notes = self.notes.toPlainText().strip()
         self._game.source_url = self.source_url.text().strip()
         self._game.installed_version_raw = self.installed_ver.text().strip()
