@@ -1,7 +1,7 @@
 # UI/UX Complete Redesign Plan
 
 > **Project:** Game Library Manager v4 (PySide6 Desktop App)
-> **Branch:** `claude/redesign-ui-ux-OGqsk`
+> **Status:** UI/UX redesign planning notes
 > **Goal:** Transform the current functional but utilitarian interface into a stunning, modern, and intuitive desktop experience.
 
 ---

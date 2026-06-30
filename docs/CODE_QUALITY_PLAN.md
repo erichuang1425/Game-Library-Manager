@@ -1126,7 +1126,7 @@ The estimated timeline is 12 weeks (6 two-week sprints), but phases can be adjus
   - P1-001: Added error handling with fallback to `save_library_bundle()` in json_store.py:177-204
   - P1-010: Added initial progress emission in http_utils.py:279-281 for fast downloads
 - **Documentation:**
-  - Created AGENT.md for context preservation and reduced exploration time
+  - Maintained project notes for faster architecture review
 - Sprint 1 P1-001 (save_library_bundle error handling) now fully fixed
 - Updated all issue tracking to reflect current state
 

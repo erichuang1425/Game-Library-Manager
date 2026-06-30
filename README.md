@@ -1,37 +1,116 @@
-Game Library Manager (v4)
-=========================
+# Game Library Manager
 
-PySide6 desktop app for organising large Windows game libraries represented by shortcuts. It tracks sources, versions, archives, and health, while keeping a fast, dense grid for everyday browsing — now with sharper icons and clearer scan summaries.
+A Windows desktop app for keeping a large shortcut-based game library tidy, searchable, and launch-ready.
 
-## What it does
-- **Library grid**: Comfortable/Compact densities, responsive card scaling, quick pills (All / Missing / Updates / Source), tag chips to filter, sorting by Title / Last Played / Rating / Launch Count / Last Checked, focus mode to hide Details.
-- **Metadata editing**: Status, 1–10 rating, tags, notes, source URL, installed version, archive folder + compressed archive paths (pick/open), launch stats, and backup target info per game.
-- **Scanning**: Reads the top level of a shortcuts root for `.lnk / .url / .html`, resolves targets, and merges into the library while preserving user edits. Detects duplicate shortcut sets (Game.lnk, Game (1).lnk, …) and can quarantine extras before import. Shows a scan summary (new/updated/icons refreshed) and keeps the progress dialog responsive.
-- **Icons**: High-quality pipeline pulls the best available source (shortcut → resolved target → archive) at 1024px and downscales once, so cards stay sharp even after resizing; scanning primes icons for newly touched games.
-- **Launching**: Opens the stored shortcut; falls back to resolved target/args/working dir; updates launch count and last played.
-- **Collections**: Manual lists plus smart collections (presets: Low confidence, HTML only, Backlog, Unplayed). Sidebar shows live counts; create/rename/delete; add selected game with one click.
-- **Update tracking**: Background fetch + parse with retries/cache (6h TTL); f95zone-specific parser; Updates view shows Update / Up-to-date / Unknown / Newer local; optional “Open sources only” mode; mark installed from source; bulk source URL import with fuzzy matching and optional overwrite.
-- **Health checks**: Flags missing shortcuts/targets/source URLs/archive folders/files/game folders and version mismatches; quick Fix/Open/Remove actions; per-issue resolve/ignore; density + severity filters; hinting focuses the right Details field.
-- **Appearance & UX**: Theme system (dark, light, neubrutalism, neumorphism, glassmorphism), font family + scale, responsive typography buckets, details toggle with size guard, splitter persistence, focus mode, guarded top-level windows (debug).
-- **Storage & logging**: Library/settings in `%APPDATA%/GameLibraryManager` (`library.json`, `settings.json`). Rotating `manager.log` with fallbacks and a one-time toast when the log path falls back.
+Game Library Manager is built for people who already have folders full of `.lnk`, `.url`, and `.html` launchers and want a cleaner way to browse them. It scans a shortcut root, keeps your edits in a local JSON library, tracks versions and source URLs, flags broken entries, and gives the collection a fast PySide6 interface instead of another spreadsheet.
 
-## First run
-1. `pip install -r requirements.txt`
-2. `python src/main.py`
-3. Click **Scan** and choose your shortcuts root (top-level only). Duplicate shortcut groups can be quarantined automatically if you accept the prompt.
-4. Select a game, set **Source URL**, and optionally archive paths/installed version in **Details**.
-5. Press **Check Updates** (dropdown has “Open sources only”). Results land in **Updates**; mark installed from source if desired.
-6. Open **Health Checks** to fix or ignore flagged items.
+## At a Glance
 
-## Running & packaging
-- Source run: `python src/main.py` (ensure `src` is on `PYTHONPATH`; Windows required for `.lnk` resolution).
-- Requirements: see `requirements.txt` (PySide6, pywin32, lxml).
-- Packaging: see `packaging.md` for the PyInstaller command that bundles the external scanner.
+| Area | What it does |
+| --- | --- |
+| Library | Responsive card grid, compact and comfortable densities, source/status filters, tags, sorting, collections, and launch stats. |
+| Scanning | Imports top-level Windows shortcuts and web launchers, resolves targets, detects duplicate shortcut groups, and preserves existing metadata while merging. |
+| Updates | Checks source pages in the background, parses known version patterns, caches requests, and separates update states from unknown or newer local versions. |
+| Maintenance | Health checks for missing shortcuts, targets, source URLs, archive paths, game folders, and version mismatches. |
+| Customization | Dark, light, neubrutalism, neumorphism, and glassmorphism themes with font and layout controls. |
+| Tools | Bundled shortcut scanner, bulk source URL import, archive import helpers, export/import, undo/redo, keyboard shortcuts, and layout customization. |
 
-## Bundled scanner
-`Tools > Scanner` launches the included `external/scanner/GameShortcutMaker` project without blocking the UI. It can generate the shortcut root that this manager consumes.
+## Screenshots
 
-## Known limits
-- Only the top level of the shortcuts root is scanned.
-- Generic HTML parsing may miss versions on heavily customised pages; status falls back to UNKNOWN rather than guessing.
-- Tests are lightweight scripts (`src/tests`) rather than a full runner.
+The app is visual, but this repository does not currently include final screenshots. The `screenshots/` directory is reserved for public captures of the library grid, details panel, update view, and health checks.
+
+## Tech Stack
+
+- Python 3.11+
+- PySide6 for the desktop UI
+- pywin32 for Windows shortcut resolution
+- lxml for source-page parsing
+- pytest and pytest-cov for the test suite
+- GitHub Actions for Linux tests, lint checks, and a Windows smoke test
+- PyInstaller packaging notes for Windows builds
+
+## Getting Started
+
+Game Library Manager is Windows-first. The UI can be imported on other platforms for tests, but shortcut resolution depends on Windows shell APIs.
+
+```powershell
+git clone https://github.com/erichuang1425/Game-Library-Manager.git
+cd Game-Library-Manager
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python src/main.py
+```
+
+On first run:
+
+1. Choose **Scan** and select the folder that contains your shortcuts.
+2. Review duplicate shortcut groups before importing.
+3. Select a game and add source URL, installed version, notes, tags, and archive paths in **Details**.
+4. Use **Check Updates** to refresh version status.
+5. Open **Health Checks** to fix missing paths or ignore known issues.
+
+Application data is stored under `%APPDATA%/GameLibraryManager`, including `library.json`, `settings.json`, and log output.
+
+## Project Structure
+
+```text
+src/
+  main.py                         App entry point
+  app/
+    models/                       Game, collection, and enum types
+    repositories/                 Storage-facing repository layer
+    services/                     Scan, launch, update, download, archive, and import logic
+    storage/                      JSON persistence and app paths
+    ui/                           PySide6 windows, dialogs, widgets, themes, and workers
+  tests/                          Unit and regression tests
+external/scanner/GameShortcutMaker/
+                                  Bundled shortcut scanner launched from the Tools menu
+docs/                             Planning, architecture, and maintenance notes
+```
+
+## Testing
+
+Run the Python tests with `PYTHONPATH` pointed at `src`:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m pytest
+```
+
+The CI workflow also runs a Windows smoke test that imports the shortcut adapter boundary:
+
+```powershell
+python -c "import app; from app.services.shortcut_resolver import default_shell_link_adapter; print(type(default_shell_link_adapter()).__name__)"
+```
+
+## Packaging
+
+The repository includes a PyInstaller build recipe in `packaging.md`.
+
+```powershell
+pip install -r requirements.txt pyinstaller
+pyinstaller --noconfirm --windowed --name GameLibraryManager --add-data "external/scanner/GameShortcutMaker;external/scanner/GameShortcutMaker" src/main.py
+```
+
+The packaged executable is written to `dist/GameLibraryManager/GameLibraryManager.exe`.
+
+## Roadmap
+
+- Add polished public screenshots and short demo clips.
+- Improve source-page parsing for more site layouts while keeping unknown results explicit.
+- Expand archive import coverage and recovery flows.
+- Tighten accessibility around keyboard navigation, focus states, and dense grid browsing.
+- Add a documented release build checklist.
+
+## Known Limits
+
+- Scanning reads the top level of the selected shortcut root.
+- Generic HTML parsing may miss heavily customized source pages.
+- `.lnk` handling and full launch behavior require Windows.
+- The app stores data locally; there is no cloud sync layer.
+
+## License
+
+No license file is currently included. Until one is added, all rights are reserved by the repository owner.

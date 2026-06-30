@@ -1,8 +1,8 @@
 # Next Sprint: Immediate Task List
 
-> **Purpose:** Comprehensive, actionable task document for AI agents. Read this before starting work.
+> **Purpose:** Comprehensive, actionable task document for future implementation work.
 > **Last Updated:** 2026-02-13
-> **Prerequisites:** Read `AGENT.md` first for project context, then this document for tasks.
+> **Prerequisites:** Review the README, architecture notes, and current code before starting tasks.
 > **Builds On:** `docs/CODE_QUALITY_PLAN.md` (Sprints 1-5 complete), `docs/IMPROVEMENTS.md` (issue catalog)
 
 ---
@@ -885,10 +885,10 @@ jobs:
 | Theme system | `src/app/ui/theme.py` |
 | Logging | `src/logging_utils.py` |
 | Settings storage | `src/app/storage/paths.py` |
-| Agent context | `AGENT.md` |
+| Project context | README and docs |
 | Quality plan | `docs/CODE_QUALITY_PLAN.md` |
 | Issue catalog | `docs/IMPROVEMENTS.md` |
 
 ---
 
-*This document should be read by any AI agent tasked with improving this codebase. Execute tasks in order, commit after each task, and run tests to verify.*
+*This document should be read before improving this codebase. Execute tasks in order, commit focused changes, and run tests to verify behavior.*

@@ -610,4 +610,4 @@ class GDriveHandler(HostHandler):
 
 *Roadmap created: 2026-02-02*
 *Version: 1.0*
-*Author: Claude Code*
+*Maintained as part of the project roadmap.*
