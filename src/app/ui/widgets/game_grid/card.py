@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, QEasingCurve, QPropertyAnimation,
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QSizePolicy, QMenu,
-    QGraphicsOpacityEffect, QStackedLayout, QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect, QStackedLayout,
 )
 from PySide6.QtGui import QCursor, QColor, QPixmap, QDrag
 
@@ -77,19 +77,18 @@ class GameCard(QFrame):
         theme = self._theme
         pad = theme.spacing_md if view_mode == "comfortable" else theme.spacing_sm
 
-        # Refined card styling — subtle border, clean background
-        self.setStyleSheet(
+        # Refined card styling — depth comes from border + background tokens.
+        # We deliberately avoid a per-card QGraphicsDropShadowEffect: it forces
+        # off-screen rendering on every paint and, combined with the entrance
+        # fade (which also needs the single graphics-effect slot), caused effect
+        # thrash and scroll jank. Hover "lift" is a cheap stylesheet swap.
+        self._base_style = (
             f"QFrame {{ {card_style(theme)} }}"
-            f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
+            f"QFrame:hover {{ {card_style(theme, hover=True)} "
+            f"background: {(theme.surface_raised or theme.surface_alt).name(QColor.HexArgb)}; }}"
         )
-
-        # Soft drop shadow for depth
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(16)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(), theme.elevation_low))
-        self.setGraphicsEffect(shadow)
-        self._shadow_effect = shadow
+        self.setStyleSheet(self._base_style)
+        self._shadow_effect = None
 
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -116,9 +115,14 @@ class GameCard(QFrame):
         icon_container.setSpacing(0)
 
         self.icon_frame = QFrame()
+        # Round only the top corners so the colored status strip below reads as a
+        # clean "cover-art underline" flush against the bottom of the artwork.
         self.icon_frame.setStyleSheet(
             f"QFrame {{ background:{theme.surface_alt.name(QColor.HexArgb)}; "
-            f"border-radius:{theme.radius_md}px; border: none; }}"
+            f"border-top-left-radius:{theme.radius_md}px; "
+            f"border-top-right-radius:{theme.radius_md}px; "
+            f"border-bottom-left-radius:0px; border-bottom-right-radius:0px; "
+            f"border: none; }}"
         )
         icon_ratio = 0.65 if view_mode == "comfortable" else 0.55
         icon_height = int(self.minimumHeight() * icon_ratio)
@@ -202,10 +206,11 @@ class GameCard(QFrame):
 
     @staticmethod
     def _status_bar_style(sc: QColor) -> str:
-        """Stylesheet for the bottom status strip — a rounded, accent-colored pill."""
+        """Stylesheet for the status strip — a colored underline beneath the art."""
         return (
             f"QPushButton {{ background: {sc.name()}; border: none; "
-            f"border-radius: 3px; }}"
+            f"border-top-left-radius: 0px; border-top-right-radius: 0px; "
+            f"border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }}"
             f"QPushButton:hover {{ background: {sc.lighter(110).name()}; }}"
         )
 
@@ -571,15 +576,8 @@ class GameCard(QFrame):
         self.overlay_anim.stop()
         self.overlay_anim.setDirection(QPropertyAnimation.Forward)
         self.overlay_anim.start()
-        theme = self._theme
-        # Elevate shadow for subtle depth feedback (no margin changes)
-        if hasattr(self, '_shadow_effect') and self._shadow_effect:
-            self._shadow_effect.setBlurRadius(24)
-            self._shadow_effect.setOffset(0, 6)
-            self._shadow_effect.setColor(QColor(
-                theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
-                theme.elevation_mid,
-            ))
+        # Hover "lift" is handled by the QFrame:hover stylesheet rule (cheap,
+        # no off-screen render). Nothing else to do here.
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
@@ -587,15 +585,6 @@ class GameCard(QFrame):
             self.overlay_anim.stop()
             self.overlay_anim.setDirection(QPropertyAnimation.Backward)
             self.overlay_anim.start()
-        theme = self._theme
-        # Reset shadow
-        if hasattr(self, '_shadow_effect') and self._shadow_effect:
-            self._shadow_effect.setBlurRadius(16)
-            self._shadow_effect.setOffset(0, 3)
-            self._shadow_effect.setColor(QColor(
-                theme.shadow.red(), theme.shadow.green(), theme.shadow.blue(),
-                theme.elevation_low,
-            ))
         super().leaveEvent(event)
 
     def resizeEvent(self, event) -> None:
@@ -668,15 +657,14 @@ class GameCard(QFrame):
         """Update card border to show selection state."""
         theme = self._theme
         if self._selected:
+            sr = (theme.surface_raised or theme.surface_alt).name(QColor.HexArgb)
             self.setStyleSheet(
                 f"QFrame {{ {card_style(theme)} border: 2px solid {theme.accent.name()}; }}"
-                f"QFrame:hover {{ {card_style(theme, hover=True)} border: 2px solid {theme.accent.name()}; }}"
+                f"QFrame:hover {{ {card_style(theme, hover=True)} "
+                f"background: {sr}; border: 2px solid {theme.accent.name()}; }}"
             )
         else:
-            self.setStyleSheet(
-                f"QFrame {{ {card_style(theme)} }}"
-                f"QFrame:hover {{ {card_style(theme, hover=True)} }}"
-            )
+            self.setStyleSheet(self._base_style)
 
     # ---- Icon and rendering methods ----
     def _request_async_icon(self) -> None:
@@ -845,24 +833,16 @@ class GameCard(QFrame):
         self._fade_anim.setEndValue(1.0)
         self._fade_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        # Restore shadow effect after fade completes
-        def restore_shadow():
+        # Detach the opacity effect once the fade completes so cards carry no
+        # graphics effect while scrolling (the effect is only needed during the
+        # brief entrance animation).
+        def clear_effect():
             from shiboken6 import isValid
             if not isValid(self):
                 return
-            if hasattr(self, '_shadow_effect') and self._shadow_effect:
-                # Re-create shadow since the old one was destroyed by setGraphicsEffect
-                shadow = QGraphicsDropShadowEffect(self)
-                shadow.setBlurRadius(16)
-                shadow.setOffset(0, 3)
-                shadow.setColor(QColor(
-                    self._theme.shadow.red(), self._theme.shadow.green(),
-                    self._theme.shadow.blue(), self._theme.elevation_low,
-                ))
-                self._shadow_effect = shadow
-                self.setGraphicsEffect(shadow)
+            self.setGraphicsEffect(None)
 
-        self._fade_anim.finished.connect(restore_shadow)
+        self._fade_anim.finished.connect(clear_effect)
 
         # Start with delay
         if delay_ms > 0:

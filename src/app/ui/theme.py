@@ -515,11 +515,11 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
         min-height: 40px;
     }}
     QScrollBar::handle:vertical:hover {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},100);
+        background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},150);
         border-radius: 5px;
     }}
     QScrollBar::handle:vertical:pressed {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},140);
+        background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},200);
     }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
@@ -543,11 +543,11 @@ def apply_theme(app: QApplication, theme_name: str, font_family: str, font_scale
         min-width: 40px;
     }}
     QScrollBar::handle:horizontal:hover {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},100);
+        background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},150);
         border-radius: 5px;
     }}
     QScrollBar::handle:horizontal:pressed {{
-        background: rgba({theme.text_muted.red()},{theme.text_muted.green()},{theme.text_muted.blue()},140);
+        background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},200);
     }}
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
         width: 0px;
@@ -720,8 +720,8 @@ def primary_btn_style(theme: ThemeSpec) -> str:
         f"color: {theme.bg.name()}; "
         f"border: none; "
         f"border-radius: {theme.radius_md}px; "
-        f"padding: 8px 20px; "
-        f"font-weight: 600; font-size: 14px; "
+        f"padding: 6px 16px; "
+        f"font-weight: 600; font-size: 13px; "
         f"}} "
         f"QPushButton:hover {{ background: {theme.accent.lighter(112).name()}; }} "
         f"QPushButton:pressed {{ background: {theme.accent.darker(110).name()}; }} "
@@ -738,8 +738,8 @@ def secondary_btn_style(theme: ThemeSpec) -> str:
         f"color: {theme.accent.name()}; "
         f"border: 1px solid {theme.accent.name()}; "
         f"border-radius: {theme.radius_md}px; "
-        f"padding: 7px 16px; "
-        f"font-weight: 500; font-size: 13px; "
+        f"padding: 5px 12px; "
+        f"font-weight: 500; font-size: 12px; "
         f"}} "
         f"QPushButton:hover {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},25); }} "
         f"QPushButton:pressed {{ background: rgba({theme.accent.red()},{theme.accent.green()},{theme.accent.blue()},50); }} "
@@ -756,7 +756,7 @@ def ghost_btn_style(theme: ThemeSpec) -> str:
         f"color: {theme.text_muted.name()}; "
         f"border: none; "
         f"border-radius: {theme.radius_sm}px; "
-        f"padding: 6px 10px; "
+        f"padding: 4px 8px; "
         f"font-size: 13px; "
         f"}} "
         f"QPushButton:hover, QToolButton:hover {{ "
@@ -781,6 +781,105 @@ def danger_btn_style(theme: ThemeSpec) -> str:
         f"}} "
         f"QPushButton:hover {{ background: rgba({err.red()},{err.green()},{err.blue()},25); }} "
         f"QPushButton:pressed {{ background: rgba({err.red()},{err.green()},{err.blue()},50); }}"
+    )
+
+
+def toolbar_btn_style(theme: ThemeSpec) -> str:
+    """Compact neutral button for toolbar actions (Updates, Filter, View).
+
+    Reads as a quiet surface chip at rest; accent-tinted on hover. Covers both
+    QPushButton and QToolButton (the popover triggers use QToolButton).
+    """
+    acc = theme.accent
+    return (
+        f"QPushButton, QToolButton {{ "
+        f"background: {theme.surface_alt.name(QColor.HexArgb)}; "
+        f"color: {theme.text.name()}; "
+        f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+        f"border-radius: {theme.radius_md}px; "
+        f"padding: 5px 12px; "
+        f"font-size: 12px; font-weight: 500; "
+        f"}} "
+        f"QToolButton::menu-indicator {{ image: none; width: 0; }} "
+        f"QPushButton:hover, QToolButton:hover {{ "
+        f"border-color: {acc.name()}; "
+        f"background: rgba({acc.red()},{acc.green()},{acc.blue()},28); }} "
+        f"QPushButton:pressed, QToolButton:pressed {{ "
+        f"background: rgba({acc.red()},{acc.green()},{acc.blue()},50); }} "
+        f"QPushButton:disabled, QToolButton:disabled {{ "
+        f"color: {theme.text_muted.name()}; "
+        f"border-color: {theme.outline.name(QColor.HexArgb)}; }}"
+    )
+
+
+def segmented_btn_style(theme: ThemeSpec, position: str = "mid") -> str:
+    """Joined toggle button for a segmented control (quick-filter pills).
+
+    Args:
+        theme: Current theme spec
+        position: "left", "mid", or "right" — controls which corners round and
+            avoids doubled borders between adjacent segments.
+    """
+    acc = theme.accent
+    r = theme.radius_md
+    if position == "left":
+        radius = f"border-top-left-radius: {r}px; border-bottom-left-radius: {r}px; border-right: none;"
+    elif position == "right":
+        radius = f"border-top-right-radius: {r}px; border-bottom-right-radius: {r}px;"
+    else:  # mid
+        radius = "border-right: none;"
+    return (
+        f"QPushButton {{ "
+        f"background: {theme.surface_alt.name(QColor.HexArgb)}; "
+        f"color: {theme.text_muted.name()}; "
+        f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+        f"border-radius: 0px; {radius} "
+        f"padding: 5px 12px; "
+        f"font-size: 12px; font-weight: 500; "
+        f"}} "
+        f"QPushButton:hover {{ color: {theme.text.name()}; "
+        f"background: {theme.interactive_hover.name(QColor.HexArgb)}; }} "
+        f"QPushButton:checked {{ "
+        f"background: {acc.name()}; color: {theme.bg.name()}; "
+        f"border-color: {acc.name()}; font-weight: 600; }}"
+    )
+
+
+def icon_btn_style(theme: ThemeSpec, active: bool = False) -> str:
+    """Square icon toggle button (Focus / Details / Select).
+
+    The active flag is only used as a default; checkable buttons also honor the
+    :checked pseudo-state so the style works for QToolButton toggles too.
+    """
+    acc = theme.accent
+    return (
+        f"QPushButton, QToolButton {{ "
+        f"background: transparent; "
+        f"color: {theme.text_muted.name()}; "
+        f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+        f"border-radius: {theme.radius_sm}px; "
+        f"padding: 0; font-size: 14px; "
+        f"}} "
+        f"QPushButton:hover, QToolButton:hover {{ "
+        f"color: {theme.text.name()}; "
+        f"background: {theme.surface_alt.name(QColor.HexArgb)}; }} "
+        f"QPushButton:checked, QToolButton:checked {{ "
+        f"background: {acc.name()}; color: {theme.bg.name()}; "
+        f"border-color: {acc.name()}; }}"
+    )
+
+
+def popover_frame_style(theme: ThemeSpec) -> str:
+    """Shared container look for the Filter / View popovers."""
+    sr = theme.surface_raised or theme.surface
+    return (
+        f"QFrame#popover {{ "
+        f"background: {sr.name(QColor.HexArgb)}; "
+        f"border: 1px solid {theme.outline.name(QColor.HexArgb)}; "
+        f"border-radius: {theme.radius_lg}px; "
+        f"}} "
+        f"QFrame#popover QLabel {{ background: transparent; border: none; "
+        f"color: {theme.text_muted.name()}; }}"
     )
 
 
